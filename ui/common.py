@@ -8,13 +8,14 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from core import config, db, i18n, netcheck, store, sync
+from core import config, db, i18n, jobs, netcheck, store, sync
 from core.ai import AIClient, AIError
 from core.i18n import t
 from core.master import Master
@@ -281,11 +282,11 @@ def save_master(name: str, data: bytes) -> None:
         record("master", t("Cập nhật master: {name}", name=name), {"file": name, "size": len(data), "master_id": mid})
         return
     history.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = config.now().strftime("%Y%m%d-%H%M%S")
     file.write_bytes(data)
     shutil.copyfile(file, history / f"{stamp}_{Path(name).name}")
     meta.write_text(json.dumps({
-        "name": name, "uploaded_at": datetime.now().strftime("%d/%m/%Y %H:%M"), "uploaded_by": auth.username(),
+        "name": name, "uploaded_at": config.now().strftime("%d/%m/%Y %H:%M"), "uploaded_by": auth.username(),
     }, ensure_ascii=False), encoding="utf-8")
     record("master", t("Cập nhật master: {name}", name=name), {"file": name, "size": len(data), "history_copy": f"{stamp}_{name}"})
 
@@ -344,29 +345,106 @@ def ai_client() -> AIClient | None:
 # ---------------------------------------------------------------------------
 # Browser automation (chạy tiến trình riêng, stream log lên UI)
 # ---------------------------------------------------------------------------
-def automation_notice() -> bool:
+AGENT_PICKUP_SECONDS = 40  # agent không nhận lệnh trong chừng này giây -> huỷ lệnh, báo người bấm
+AGENT_MAX_SECONDS = 3 * 3600
+
+
+def automation_reason() -> str:
+    """Vì sao người dùng này không chạy được thao tác tự động ở đây ('' nếu chạy được)."""
     if auth.automation_allowed():
-        return True
+        return ""
     if not auth.can_run():
-        st.info(t("Quyền Chỉ xem không chạy được thao tác tự động."))
-    elif config.team_mode():
-        st.info(t("Thao tác tự động dùng phiên đăng nhập MyTool/NC tool của chính bạn, nên phải chạy trên máy bạn: "
-                  "mở bản local của app (run.bat), cấu hình server team ở trang Cài đặt — kết quả sẽ tự đẩy lên đây. "
-                  "Hoặc tải file lên thủ công ở tab bên cạnh."))
-    else:
-        st.info(t("Thao tác tự động đang bị tắt trên máy này (L2M_NO_AUTOMATION=1). Hãy tải file lên thủ công."))
-    return False
+        return t("Quyền Chỉ xem không chạy được thao tác tự động.")
+    if auth.automation_via_agent():  # website, hoặc mở app từ máy khác
+        return t("Chưa thấy agent trên máy bạn. Thao tác NC tool / MyTool cần VPN công ty và phiên SSO của chính bạn, nên website "
+                 "gửi lệnh về máy bạn chạy: mở **agent.bat** trong thư mục app trên máy bạn (máy có VPN, đã nối CSDL chung ở "
+                 "trang Cài đặt), đăng nhập một lần bằng tài khoản L2M Ops rồi giữ cửa sổ đó mở. Tải lại trang này sau vài giây.")
+    if config.team_mode():
+        return t("Thao tác tự động dùng phiên đăng nhập MyTool/NC tool của chính bạn, nên phải chạy trên máy bạn: "
+                 "mở bản local của app (run.bat), cấu hình server team ở trang Cài đặt — kết quả sẽ tự đẩy lên đây. "
+                 "Hoặc tải file lên thủ công ở tab bên cạnh.")
+    return t("Thao tác tự động đang bị tắt trên máy này (L2M_NO_AUTOMATION=1). Hãy tải file lên thủ công.")
+
+
+def automation_notice() -> bool:
+    reason = automation_reason()
+    if reason:
+        st.info(reason)
+    elif not auth.automation_local():
+        agent = jobs.agent_status(auth.username()) or {}
+        st.caption(t("🟢 Thao tác tự động chạy qua agent trên máy **{host}** của bạn.", host=agent.get("host", "?")))
+    return not reason
 
 
 def run_job(job: str, payload: dict, title: str) -> dict | None:
-    if not auth.automation_allowed():
-        st.error(t("Bạn không chạy được thao tác tự động từ máy này."))
+    payload = {"game": game()["id"], **payload}
+    if auth.automation_local():
+        return _run_local(job, payload, title)
+    if auth.automation_via_agent():
+        return _run_via_agent(job, payload, title)
+    st.error(t("Bạn không chạy được thao tác tự động từ máy này."))
+    return None
+
+
+def _show_outcome(status, title: str, result: dict) -> dict:
+    ok = bool(result.get("ok"))
+    # Lỗi mạng đã có thông báo rõ ràng -> thu gọn log; lỗi khác mở log để xem chi tiết.
+    status.update(label=f"{title} — {t('xong') if ok else t('lỗi (bấm để xem log)')}", state="complete" if ok else "error",
+                  expanded=not ok and result.get("kind") != "network")
+    return result
+
+
+def _run_via_agent(job: str, payload: dict, title: str) -> dict | None:
+    """Gửi lệnh tới agent trên máy người bấm, chờ và hiện log trực tiếp (core/jobs.py)."""
+    user = auth.username()
+    agent = jobs.agent_status(user, fresh=True)
+    if not agent:
+        st.error(automation_reason() or t("Chưa thấy agent trên máy bạn."))
         return None
+    jid = jobs.enqueue(job, {**payload, "_lang": i18n.get_lang()}, user)
+    started = last_check = time.monotonic()
+    shown = None
+    with st.status(title, expanded=True) as status:
+        st.caption(t("Chạy trên máy **{host}** (agent của {user}) — giữ trang này mở tới khi xong.", host=agent["host"], user=user))
+        box = st.empty()
+        while True:
+            time.sleep(1)
+            row = jobs.get(jid) or {"status": "error", "log": ""}
+            if row["log"] != shown:
+                shown = row["log"]
+                box.code("\n".join(shown.splitlines()[-60:]) or t("Đang chờ agent nhận lệnh…"), language=None)
+            elapsed = time.monotonic() - started
+            if row["status"] in jobs.FINISHED:
+                result = jobs.result(jid, config.WORK_DIR / "jobs" / str(jid)) or {
+                    "ok": False, "error": t("Lệnh đã bị huỷ hoặc hết hạn trước khi agent chạy.") if row["status"] in ("expired", "cancelled")
+                    else t("Tiến trình automation không trả kết quả — xem log phía trên.")}
+                break
+            if row["status"] == "queued" and elapsed > AGENT_PICKUP_SECONDS and jobs.cancel(jid):
+                result = {"ok": False, "error": t("Agent trên máy {host} không nhận lệnh. Kiểm tra cửa sổ agent.bat còn mở và máy còn mạng, "
+                                                  "rồi bấm lại.", host=agent["host"])}
+                break
+            if time.monotonic() - last_check > 15:
+                last_check = time.monotonic()
+                if not jobs.agent_status(user, fresh=True):
+                    jobs.cancel(jid, only_queued=False)
+                    result = {"ok": False, "error": t("Mất liên lạc với agent trên máy {host} (cửa sổ agent bị đóng hoặc máy mất mạng).",
+                                                      host=agent["host"])}
+                    break
+            if elapsed > AGENT_MAX_SECONDS:
+                jobs.cancel(jid, only_queued=False)
+                result = {"ok": False, "error": t("Quá thời gian chờ agent.")}
+                break
+        _show_outcome(status, title, result)
+    if not result.get("ok"):
+        st.error(result.get("error", t("Lỗi không rõ")), icon="🌐" if result.get("kind") == "network" else None)
+    return result
+
+
+def _run_local(job: str, payload: dict, title: str) -> dict:
     config.ensure_dirs()
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = config.now().strftime("%Y%m%d-%H%M%S")
     inp = config.WORK_DIR / f"{job}-{stamp}-in.json"
     out = config.WORK_DIR / f"{job}-{stamp}-out.json"
-    payload = {"game": game()["id"], **payload}
     inp.write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding="utf-8")
     cmd = [sys.executable, "-m", "automation.runner", job, "--input", str(inp), "--output", str(out)]
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "L2M_LANG": i18n.get_lang()}
@@ -383,11 +461,8 @@ def run_job(job: str, payload: dict, title: str) -> dict | None:
         proc.wait()
         result = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {
             "ok": False, "error": t("Tiến trình automation không trả kết quả — xem log phía trên.")}
-        ok = bool(result.get("ok"))
-        # Lỗi mạng đã có thông báo rõ ràng -> thu gọn log; lỗi khác mở log để xem chi tiết.
-        status.update(label=f"{title} — {t('xong') if ok else t('lỗi (bấm để xem log)')}", state="complete" if ok else "error",
-                      expanded=not ok and result.get("kind") != "network")
-    if not ok:
+        _show_outcome(status, title, result)
+    if not result.get("ok"):
         st.error(result.get("error", t("Lỗi không rõ")), icon="🌐" if result.get("kind") == "network" else None)
     return result
 
@@ -399,8 +474,9 @@ def _reach(url: str, lang: str) -> dict:
 
 
 def reachability_warning(url: str, label: str) -> bool:
-    """Cảnh báo ngay trên trang nếu máy này chưa tới được tool (vd chưa bật VPN). Trả về True nếu tới được."""
-    if not auth.automation_allowed() or not url:
+    """Cảnh báo ngay trên trang nếu máy này chưa tới được tool (vd chưa bật VPN). Trả về True nếu tới được.
+    Chạy qua agent thì máy này (website) không kiểm tra được — agent tự kiểm tra trước khi mở trình duyệt."""
+    if not auth.automation_local() or not url:
         return True
     r = _reach(url, i18n.get_lang())
     if r["ok"] or (r["step"] == "dns" and netcheck.system_proxy_configured()):

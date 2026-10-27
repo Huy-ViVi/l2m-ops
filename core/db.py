@@ -8,6 +8,7 @@ SQL trong store viết theo kiểu SQLite (dấu ?, LIKE); lớp _PgConn đổi 
 """
 from __future__ import annotations
 
+import atexit
 import os
 import re
 import sqlite3
@@ -200,3 +201,6 @@ def close_all() -> None:
         for pool in _pools.values():
             pool.close()
         _pools.clear()
+
+
+atexit.register(close_all)  # đóng pool khi tiến trình thoát (tránh lỗi "cannot join thread at interpreter shutdown")

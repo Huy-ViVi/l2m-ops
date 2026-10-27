@@ -183,6 +183,8 @@ if c2.button(t("🔎 Tra riêng {n} item trên NC tool", n=len(pending_names)),
         st.session_state[K("nc_lookup")] = res["results"]
         found = [c for r in res["results"].values() for c in nc.lookup_candidates(r.get("rows", []))]
         store.save_tool_items(gid, found)  # kết quả tra được cũng thành dữ liệu so khớp cho lần sau
+if not auth.automation_allowed():
+    st.caption("ℹ️ " + common.automation_reason())
 
 lookup = st.session_state.get(K("nc_lookup"), {})
 candidates: dict[str, list[dict]] = {}

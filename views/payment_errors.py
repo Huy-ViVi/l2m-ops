@@ -1,4 +1,3 @@
-from datetime import date
 from pathlib import Path
 
 import streamlit as st
@@ -178,7 +177,7 @@ for ok, msg in audit:
 # ---- 5. Xuất file -----------------------------------------------------------
 # File Payment Error Case + CSV là định dạng cố định giao CS/NC: không đổi theo ngôn ngữ giao diện.
 st.subheader(t("5. Xuất file"))
-day = st.date_input(t("Ngày của đợt xử lý"), value=date.today(), format="DD/MM/YYYY")
+day = st.date_input(t("Ngày của đợt xử lý"), value=config.today(), format="DD/MM/YYYY")
 if not res.lines:
     st.info(t("Không có order lỗi thật nào để xuất."))
 else:

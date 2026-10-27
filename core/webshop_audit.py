@@ -12,6 +12,7 @@ from datetime import date, datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
+from . import config
 from .excel import cell_text, norm, to_number
 from .i18n import ai_language, t, tr_value
 from .master import Master, key_variants, markets_for, short_key
@@ -136,7 +137,7 @@ def compare(expected: list[dict], actual: list[dict]) -> list[dict]:
 
 def report_markdown(results: list[dict], day: date | None = None, game_name: str = "Lineage2M") -> str:
     """Báo cáo text (hiện trên trang + tải về) theo ngôn ngữ giao diện."""
-    day = day or date.today()
+    day = day or config.today()
     packages = list(dict.fromkeys(r["Package ID"] for r in results))
     shops = {(r["Package ID"], r["Shop"]) for r in results}
     errors = [r for r in results if r["Kết quả"].startswith("❌")]
@@ -227,7 +228,7 @@ def ai_extract_timeline(ai, master: Master, package_ids: list[str], max_rows: in
         f"Viết note bằng {ai_language()}."
     )
     prompt = (
-        f"Hôm nay: {date.today():%d/%m/%Y}.\n"
+        f"Hôm nay: {config.today():%d/%m/%Y}.\n"
         "Gói cần tìm (Product Key — tên):\n" + "\n".join(f"- {k} — {names[k]}" for k in keys)
         + f"\n\nHeader sheet: {header}\n\nDữ liệu từ dòng {master.timeline[0][0] if master.timeline else '?'}:\n{body}"
     )

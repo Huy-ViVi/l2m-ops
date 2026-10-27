@@ -16,7 +16,7 @@ import threading
 import time
 from contextlib import contextmanager
 from copy import deepcopy
-from datetime import datetime
+from datetime import timedelta
 
 from . import config, db
 from .i18n import t
@@ -63,12 +63,23 @@ CREATE TABLE IF NOT EXISTS master_files (
     id INTEGER PRIMARY KEY, game TEXT NOT NULL, name TEXT NOT NULL, uploaded_by TEXT, uploaded_at TEXT,
     is_current INTEGER NOT NULL DEFAULT 0, content BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY, job TEXT NOT NULL, payload TEXT NOT NULL, requested_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued', agent TEXT, log TEXT NOT NULL DEFAULT '', result TEXT,
+    created_at TEXT, started_at TEXT, finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS job_files (
+    id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL, name TEXT NOT NULL, content BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agents (
+    username TEXT PRIMARY KEY, host TEXT, seen_at TEXT, version TEXT
+);
 """
 SESSION_DAYS = 14
 
 
 def now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return config.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ---------------------------------------------------------------------------
@@ -325,11 +336,11 @@ def issue_token(username: str, by: str) -> str:
 def create_session(username: str) -> str:
     """Phiên đăng nhập ghi nhớ qua cookie (để F5 không bị đăng xuất). Lưu dạng băm."""
     token = secrets.token_urlsafe(32)
-    expires = datetime.now().timestamp() + SESSION_DAYS * 86400
+    expires = config.now() + timedelta(days=SESSION_DAYS)
     with connect() as c:
         c.execute("DELETE FROM sessions WHERE expires_at < ?", (now(),))
         c.execute("INSERT INTO sessions(token_hash, username, created_at, expires_at) VALUES (?,?,?,?)",
-                  (_hash_token(token), username, now(), datetime.fromtimestamp(expires).strftime("%Y-%m-%d %H:%M:%S")))
+                  (_hash_token(token), username, now(), expires.strftime("%Y-%m-%d %H:%M:%S")))
     return token
 
 

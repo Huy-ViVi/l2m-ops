@@ -1,5 +1,4 @@
 import re
-from datetime import date
 
 import streamlit as st
 
@@ -123,12 +122,12 @@ m2.metric(t("Điểm kiểm tra"), len(results))
 m3.metric(t("Sai"), len(errors))
 only_err = st.toggle(t("Chỉ hiện dòng sai"), value=bool(errors))
 st.dataframe(common.df(errors if only_err else results), hide_index=True, width="stretch")
-report = wa.report_markdown(results, date.today(), g["name"])
+report = wa.report_markdown(results, config.today(), g["name"])
 c1, c2 = st.columns(2)
 c1.download_button(t("⬇ Tải báo cáo Excel"), data=wa.report_excel(results),
-                   file_name=f"Webshop-Audit-{date.today():%Y-%m-%d}.xlsx", type="primary")
+                   file_name=f"Webshop-Audit-{config.today():%Y-%m-%d}.xlsx", type="primary")
 c2.download_button(t("⬇ Tải báo cáo Markdown"), data=report.encode("utf-8"),
-                   file_name=f"Webshop-Audit-{date.today():%Y-%m-%d}.md")
+                   file_name=f"Webshop-Audit-{config.today():%Y-%m-%d}.md")
 with st.expander(t("Báo cáo dạng text (copy gửi team)")):
     st.code(report, language=None)
 if errors:
@@ -137,11 +136,11 @@ if errors:
 # Khoá metrics/bảng giữ tiếng Việt (dữ liệu lưu), trang Lịch sử dịch khi hiển thị.
 common.record_button(
     t("📌 Lưu báo cáo vào lịch sử"), "webshop_audit",
-    t("Kiểm tra webshop {day} — {packages} gói, {errors} lỗi ({check_type})", day=f"{date.today():%d/%m/%Y}",
+    t("Kiểm tra webshop {day} — {packages} gói, {errors} lỗi ({check_type})", day=f"{config.today():%d/%m/%Y}",
       packages=len(pids), errors=len(errors), check_type=t(CHECK_TYPES[check_type]).lower()),
     {"metrics": {"Gói": len(pids), "Điểm kiểm tra": len(results), "Sai": len(errors)},
      "tables": {"Dòng sai": errors, "Toàn bộ": results}, "package_ids": pids},
-    {f"Webshop-Audit-{date.today():%Y-%m-%d}.xlsx": wa.report_excel(results),
-     f"Webshop-Audit-{date.today():%Y-%m-%d}.md": report.encode("utf-8")},
+    {f"Webshop-Audit-{config.today():%Y-%m-%d}.xlsx": wa.report_excel(results),
+     f"Webshop-Audit-{config.today():%Y-%m-%d}.md": report.encode("utf-8")},
     key="wa_rec",
 )

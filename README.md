@@ -66,8 +66,16 @@ Thay cho việc lấy một máy làm server: website chạy trên **Streamlit C
 
 | Nơi chạy | Làm được | Ghi chú |
 |---|---|---|
-| Website (Streamlit Cloud) | Đăng nhập, lịch sử, Item ID, master, cài đặt, case nạp lỗi và kiểm tra webshop bằng file tải lên | Không điều khiển trình duyệt (`L2M_NO_AUTOMATION=1`) |
+| Website (Streamlit Cloud) | Mọi thứ. Nút NC tool / MyTool chạy qua **agent** trên máy người bấm (mục dưới) | Máy chủ website không vào được NC tool / MyTool (`L2M_NO_AUTOMATION=1`) |
 | Bản local (run.bat) nối CSDL chung | Mọi thứ, kể cả thao tác tự động NC tool / MyTool (cần VPN + SSO trên máy đó) | Đăng nhập bằng tài khoản trên website; kết quả ghi thẳng vào CSDL chung |
+| Agent (agent.bat) | Chạy các nút NC tool / MyTool bạn bấm trên website, ngay trên máy bạn | Cần VPN, Edge, phiên SSO của bạn; giữ cửa sổ mở |
+
+**Agent: bấm trên website, chạy trên máy bạn.** NC tool / MyTool chỉ vào được từ mạng công ty bằng SSO của từng người, nên website gửi lệnh vào CSDL chung (bảng `jobs`), agent trên máy *của chính người bấm* nhận lệnh, chạy `automation.runner` y như bản local (mở Edge trên màn hình người đó, vẫn tự bấm Register), đẩy log lên website mỗi giây và trả kết quả (file MyTool nằm ở bảng `job_files`).
+1. Trên máy có VPN: cài app (run.bat một lần), nối CSDL chung ở trang Cài đặt.
+2. Mở `agent.bat`, đăng nhập **một lần** bằng tài khoản L2M Ops (lưu ở `data/local.json`; `agent.bat --logout` để đổi tài khoản). Giữ cửa sổ mở.
+3. Trên website, các nút NC tool / MyTool bấm được khi agent đang chạy (trang hiện "🟢 … agent trên máy …"). Lệnh chỉ chạy trên agent của đúng người bấm; lệnh chờ quá 2 phút bị bỏ (không mở NC tool bất ngờ); đóng agent giữa chừng thì website báo mất liên lạc.
+- Không chạy cùng lúc thao tác tự động ở bản local và ở agent trên cùng một máy (dùng chung hồ sơ trình duyệt).
+- Ai có địa chỉ CSDL chung là có toàn quyền trên CSDL đó: chỉ đưa cho người trong team.
 
 Khi có `DATABASE_URL` (website: Secrets; bản local: trang Cài đặt → *Nối máy này vào CSDL chung*, lưu ở `data/local.json`):
 - App luôn chạy chế độ team (đăng nhập) để mỗi thao tác ghi đúng tên người làm.
@@ -86,7 +94,9 @@ Script chép tài khoản (giữ nguyên mật khẩu), lịch sử + file, Item
 
 **Lưu ý gói miễn phí:** website ngủ khi lâu không ai vào (người vào đầu chờ khoảng 1 phút); Supabase tạm dừng project nếu 7 ngày không dùng (vào trang quản lý bấm Restore). Máy thành viên đã có `.venv` từ trước cần cài thêm thư viện: `.venv\Scripts\python.exe -m pip install -r requirements.txt`.
 
-Test chế độ CSDL chung trên một schema tạm (tự xoá khi xong): đặt `L2M_TEST_DATABASE_URL` rồi chạy `tests\test_shared_db.py`.
+Test chế độ CSDL chung trên một schema tạm (tự xoá khi xong): đặt `L2M_TEST_DATABASE_URL` rồi chạy `tests\test_shared_db.py` và `tests\test_jobs.py` (thêm `L2M_TEST_BROWSER=1` để chạy một lượt thật website → agent → Edge ẩn trên trang NC tool giả lập).
+
+Mọi mốc thời gian ghi vào CSDL / hiển thị theo giờ Việt Nam (UTC+7, `config.now()`), vì máy chủ website chạy giờ UTC.
 
 ## Tìm Item ID khi tên trong Excel khác tên trên tool
 
@@ -138,6 +148,7 @@ Chọn ở ô **🌐 Language** trên cùng thanh bên trái, kể cả ở tran
 - `tests/test_item_lookup_mock.py`: Tra Item lookup trên trang giả lập giống trang thật (app group mặc định là game khác, bảng form nằm trên bảng kết quả).
 - `tests/test_nc_tool_mock.py`: tra Item ID bằng POST (cắt tên 40 ký tự, loại item 83/“Wrong”), tải toàn bộ danh sách item, tạo product + limit trên trang giả lập NC tool.
 - `tests/test_i18n.py`: mọi chữ hiển thị đều có bản dịch tiếng Anh, chỗ `{}` khớp nhau, không dịch trùng lệch.
+- `tests/test_jobs.py`: hàng đợi website → agent (chỉ chạy lệnh của đúng người, một máy nhận, hết hạn, huỷ giữa chừng, chuyển file kết quả); với CSDL chung: website chờ agent và hiện log, và một lượt thật qua Edge ẩn.
 - Chế độ team đã chạy thử trên trình duyệt ở `localhost`. **Chưa thử truy cập từ máy khác trong LAN** (cần máy thứ hai và tường lửa cho phép).
 - **Chưa chạy trên tool thật** (NC Billing Admin, MyTool). Cần đăng nhập rồi Calibrate. Lần đầu nên chạy chế độ "tôi tự bấm Register" và đối chiếu kỹ.
 - Định dạng ngày trên MyTool đang giả định `DD/MM/YYYY`. Nếu MyTool hiển thị `MM/DD`, cần chỉnh lại `core/webshop_audit.py`.
@@ -147,6 +158,7 @@ Chọn ở ô **🌐 Language** trên cùng thanh bên trái, kể cả ở tran
 ```
 app.py                 # điểm vào Streamlit: đăng nhập, menu theo quyền, khởi động API (chế độ team)
 run.bat / run-team.bat # chạy cá nhân / chạy làm server cho team
+agent.bat              # agent: chạy trên máy bạn các nút NC tool / MyTool bấm trên website
 views/                 # 3 function + Lịch sử, Dữ liệu dùng chung, Thành viên, Cài đặt
 ui/                    # thành phần UI dùng chung, đăng nhập & phân quyền (auth.py)
 core/                  # logic thuần (không phụ thuộc UI)
@@ -159,7 +171,8 @@ core/                  # logic thuần (không phụ thuộc UI)
   api_server.py, sync.py  # API nhận kết quả từ bản local / phía gửi
   i18n.py, locales/    # đa ngôn ngữ: t("chuỗi tiếng Việt") + bản dịch en_*.py
   cowork_import.py     # nhập lịch sử setup từ Claude Cowork (skill package-creation)
-automation/            # Playwright: NC tool + MyTool (chạy tiến trình riêng)
+  jobs.py              # hàng đợi lệnh website -> agent (CSDL chung)
+automation/            # Playwright: NC tool + MyTool (chạy tiến trình riêng); agent.py nhận lệnh từ website
 resources/item_ids.json  # Item ID nạp sẵn lần đầu (l2msa)
 data/                  # cài đặt, app.db, master + các phiên bản, phiên trình duyệt (không commit)
 ```

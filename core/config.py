@@ -11,9 +11,23 @@ import re
 import shutil
 import sys
 from copy import deepcopy
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 APP_ROOT = Path(__file__).resolve().parent.parent
+# Giờ của team (Việt Nam, không đổi giờ mùa hè). Website trên Streamlit Cloud chạy giờ UTC, nên mọi mốc thời gian
+# ghi vào CSDL chung / hiển thị đều lấy theo giờ này cho khớp với bản local.
+TEAM_TZ = timezone(timedelta(hours=7))
+
+
+def now() -> datetime:
+    return datetime.now(TEAM_TZ).replace(tzinfo=None)
+
+
+def today() -> date:
+    return now().date()
+
+
 RESOURCES_DIR = APP_ROOT / "resources"
 DATA_DIR = Path(os.environ.get("L2M_DATA_DIR", APP_ROOT / "data"))
 SETTINGS_PATH = DATA_DIR / "settings.json"

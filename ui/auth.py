@@ -5,7 +5,7 @@ import time
 
 import streamlit as st
 
-from core import config, store
+from core import config, db, jobs, store
 from core.i18n import t
 
 LOCAL_USER = {"username": "local", "display_name": "Máy này", "role": "admin", "active": 1}
@@ -51,9 +51,19 @@ def is_host_request() -> bool:
     return st.context.ip_address in LOOPBACK
 
 
-def automation_allowed() -> bool:
-    """Điều khiển trình duyệt dùng phiên SSO của máy server, nên chỉ người ngồi tại máy đó mới được bấm."""
+def automation_local() -> bool:
+    """Chạy automation ngay trong app này: điều khiển trình duyệt dùng phiên SSO của máy chạy app,
+    nên chỉ người ngồi tại máy đó mới được bấm."""
     return config.automation_enabled() and can_run() and is_host_request()
+
+
+def automation_via_agent() -> bool:
+    """Website / mở app từ máy khác (CSDL chung): lệnh gửi tới agent trên máy của chính người bấm (core/jobs.py)."""
+    return not automation_local() and can_run() and db.is_remote()
+
+
+def automation_allowed() -> bool:
+    return automation_local() or (automation_via_agent() and jobs.agent_status(username()) is not None)
 
 
 COOKIE = "l2m_sid"
