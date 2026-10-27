@@ -357,8 +357,8 @@ def automation_reason() -> str:
         return t("Quyền Chỉ xem không chạy được thao tác tự động.")
     if auth.automation_via_agent():  # website, hoặc mở app từ máy khác
         return t("Chưa thấy agent trên máy bạn. Thao tác NC tool / MyTool cần VPN công ty và phiên SSO của chính bạn, nên website "
-                 "gửi lệnh về máy bạn chạy: mở **agent.bat** trong thư mục app trên máy bạn (máy có VPN, đã nối CSDL chung ở "
-                 "trang Cài đặt), đăng nhập một lần bằng tài khoản L2M Ops rồi giữ cửa sổ đó mở. Tải lại trang này sau vài giây.")
+                 "gửi lệnh về máy bạn chạy. Lần đầu: bấm **⬇ Tải agent cho máy này**, giải nén, nháy đúp **agent.bat** (tự cài "
+                 "mọi thứ, có sẵn tài khoản của bạn), bật VPN và giữ cửa sổ đó mở. Tải lại trang này sau vài giây.")
     if config.team_mode():
         return t("Thao tác tự động dùng phiên đăng nhập MyTool/NC tool của chính bạn, nên phải chạy trên máy bạn: "
                  "mở bản local của app (run.bat), cấu hình server team ở trang Cài đặt — kết quả sẽ tự đẩy lên đây. "
@@ -370,9 +370,13 @@ def automation_notice() -> bool:
     reason = automation_reason()
     if reason:
         st.info(reason)
+        if auth.automation_via_agent():
+            auth.agent_download_button("agent_zip_notice")  # mỗi trang gọi automation_notice một lần
     elif not auth.automation_local():
         agent = jobs.agent_status(auth.username()) or {}
-        st.caption(t("🟢 Thao tác tự động chạy qua agent trên máy **{host}** của bạn.", host=agent.get("host", "?")))
+        st.caption(t("🟢 Thao tác tự động chạy trên máy **{host}** (agent của tài khoản **{user}**). Không phải máy của bạn? "
+                     "Bạn đang dùng tài khoản của người khác: đăng xuất rồi đăng nhập bằng tài khoản riêng.",
+                     host=agent.get("host", "?"), user=auth.username()))
     return not reason
 
 
@@ -390,7 +394,7 @@ def _show_outcome(status, title: str, result: dict) -> dict:
     ok = bool(result.get("ok"))
     # Lỗi mạng đã có thông báo rõ ràng -> thu gọn log; lỗi khác mở log để xem chi tiết.
     status.update(label=f"{title} — {t('xong') if ok else t('lỗi (bấm để xem log)')}", state="complete" if ok else "error",
-                  expanded=not ok and result.get("kind") != "network")
+                  expanded=not ok and result.get("kind") not in ("network", "closed"))
     return result
 
 

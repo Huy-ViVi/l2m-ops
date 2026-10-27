@@ -22,11 +22,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core import config, db, jobs, store  # noqa: E402
+from core import bundle, config, db, jobs, store  # noqa: E402
 from core.i18n import t  # noqa: E402
 
 RUNNER = "automation.runner"
-VERSION = "1"
 POLL_SECONDS = 2
 FLUSH_SECONDS = 1
 CANCEL_CHECK_SECONDS = 3
@@ -39,6 +38,20 @@ def say(text: str) -> None:
 def _short(e: Exception) -> str:
     text = str(e).strip().splitlines()
     return text[0][:200] if text else type(e).__name__
+
+
+def connect_shared_db(ask=getpass.getpass) -> bool:
+    """Máy mới chưa nối CSDL chung: hỏi địa chỉ ngay ở cửa sổ agent (như trang Cài đặt của bản local), lưu data/local.json."""
+    say(t("Máy này chưa nối CSDL chung. Dán địa chỉ CSDL admin gửi cho bạn (postgresql://…) rồi bấm Enter "
+          "— ký tự không hiện ra khi dán, đó là bình thường."))
+    for _ in range(3):
+        url = ask("> ").strip().strip('"')
+        ok, message = db.test_connection(url)
+        say(message)
+        if ok:
+            config.save_local({**config.load_local(), "database_url": url})
+            return True
+    return False
 
 
 def login(ask=input, ask_password=getpass.getpass) -> str:
@@ -72,7 +85,7 @@ class Heartbeat(threading.Thread):
     def run(self) -> None:
         while not self.stopped.is_set():
             try:
-                jobs.heartbeat(self.username, self.host, VERSION)
+                jobs.heartbeat(self.username, self.host, bundle.code_version())  # website so với bản của nó
                 if not self.connected:
                     say(t("✓ Đã kết nối lại CSDL chung."))
                 self.connected = True
@@ -183,9 +196,6 @@ def main() -> int:
     ap.add_argument("--logout", action="store_true", help="quên tài khoản đã lưu, đăng nhập lại")
     args = ap.parse_args()
     os.environ.setdefault("L2M_LANG", config.load_settings().get("default_lang", "vi"))
-    if not db.is_remote():
-        say(t("Máy này chưa nối CSDL chung. Mở bản local (run.bat) → Cài đặt → Nối máy này vào CSDL chung, rồi chạy lại agent.bat."))
-        return 1
     if not config.automation_enabled():
         say(t("Thao tác tự động đang bị tắt trên máy này (L2M_NO_AUTOMATION=1)."))
         return 1
@@ -195,6 +205,8 @@ def main() -> int:
         config.save_local(local)
     host = socket.gethostname()
     try:
+        if not db.is_remote() and not connect_shared_db():
+            return 1
         username = login()
         other = jobs.agent_status(username, fresh=True)
         if other and other["host"] != host:

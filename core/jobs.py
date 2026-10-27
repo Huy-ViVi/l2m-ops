@@ -1,19 +1,20 @@
 """Hàng đợi thao tác tự động cho website (CSDL chung).
 
 Website không vào được NC tool / MyTool (cần VPN công ty + SSO), nên khi bấm nút trên website:
-1. website ghi lệnh vào bảng jobs (requested_by = người bấm);
-2. agent trên máy của chính người đó (automation/agent.py, có VPN + phiên SSO của họ) nhận lệnh,
+1. website ghi lệnh vào bảng jobs (requested_by = tài khoản đang đăng nhập);
+2. agent của chính tài khoản đó (automation/agent.py trên máy người đó, có VPN + phiên SSO của họ) nhận lệnh,
    chạy automation.runner như bản local, đẩy log lên từng giây;
 3. xong thì agent ghi kết quả (file tải về nằm ở bảng job_files) — website đọc và chạy tiếp như bản local.
+Lệnh đi theo tài khoản, nên mỗi người phải đăng nhập bằng tài khoản riêng.
+Mốc giờ lấy theo đồng hồ của CSDL (db.now_sql) vì website và agent chạy trên các máy có thể lệch giờ.
 """
 from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import config, store
+from . import db, store
 
 HEARTBEAT_SECONDS = 10     # agent báo "còn sống" mỗi chừng này giây
 ONLINE_SECONDS = 45        # quá chừng này không thấy tín hiệu -> coi như agent đã tắt
@@ -25,56 +26,47 @@ FINISHED = ("done", "error", "expired", "cancelled")
 _status_cache: dict[str, tuple[float, dict | None]] = {}
 
 
-def _ago(seconds: float) -> str:
-    return (config.now() - timedelta(seconds=seconds)).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _age(ts: str | None) -> float:
-    try:
-        return (config.now() - datetime.strptime(ts or "", "%Y-%m-%d %H:%M:%S")).total_seconds()
-    except ValueError:
-        return float("inf")
-
-
 # ---- agent ------------------------------------------------------------------------
 def heartbeat(username: str, host: str, version: str = "") -> None:
     store.init()
     with store.connect() as c:
-        c.execute("INSERT INTO agents(username, host, seen_at, version) VALUES (?,?,?,?) ON CONFLICT(username) DO UPDATE SET "
-                  "host = excluded.host, seen_at = excluded.seen_at, version = excluded.version",
-                  (username, host, store.now(), version))
+        c.execute(f"INSERT INTO agents(username, host, seen_at, version) VALUES (?, ?, {db.now_sql()}, ?) ON CONFLICT(username) "
+                  "DO UPDATE SET host = excluded.host, seen_at = excluded.seen_at, version = excluded.version",
+                  (username, host, version))
 
 
 def agent_offline(username: str) -> None:
     store.init()
     with store.connect() as c:
-        c.execute("UPDATE agents SET seen_at = ? WHERE username = ?", (_ago(ONLINE_SECONDS + 1), username))
+        c.execute(f"UPDATE agents SET seen_at = {db.now_sql(ONLINE_SECONDS + 60)} WHERE username = ?", (username,))
     _status_cache.pop(username, None)
 
 
 def agent_status(username: str, fresh: bool = False) -> dict | None:
-    """Agent của người này nếu đang chạy: {'host', 'seen_at'}; None nếu chưa bật. Nhớ 10 giây cho trang khỏi chờ CSDL."""
+    """Agent của tài khoản này nếu đang chạy: {'host', 'seen_at', 'version'}; None nếu chưa bật.
+    Nhớ 10 giây cho trang khỏi chờ CSDL."""
     hit = _status_cache.get(username)
     if hit and not fresh and time.monotonic() - hit[0] < HEARTBEAT_SECONDS:
         return hit[1]
     store.init()
     with store.connect() as c:
-        row = c.execute("SELECT host, seen_at FROM agents WHERE username = ?", (username,)).fetchone()
-    value = {"host": row["host"], "seen_at": row["seen_at"]} if row and _age(row["seen_at"]) <= ONLINE_SECONDS else None
+        row = c.execute(f"SELECT host, seen_at, version FROM agents WHERE username = ? AND seen_at >= {db.now_sql(ONLINE_SECONDS)}",
+                        (username,)).fetchone()
+    value = {"host": row["host"], "seen_at": row["seen_at"], "version": row["version"] or ""} if row else None
     _status_cache[username] = (time.monotonic(), value)
     return value
 
 
 def claim(username: str, host: str) -> dict | None:
-    """Agent nhận lệnh cũ nhất đang chờ của người này (hai agent cùng tài khoản cũng chỉ một bên nhận được)."""
+    """Agent nhận lệnh cũ nhất đang chờ của tài khoản này (hai agent cùng tài khoản cũng chỉ một bên nhận được)."""
     store.init()
     with store.connect() as c:
-        c.execute("UPDATE jobs SET status = 'expired', finished_at = ? WHERE requested_by = ? AND status = 'queued' AND created_at < ?",
-                  (store.now(), username, _ago(QUEUE_EXPIRE_SECONDS)))
+        c.execute(f"UPDATE jobs SET status = 'expired', finished_at = {db.now_sql()} WHERE requested_by = ? AND status = 'queued' "
+                  f"AND created_at < {db.now_sql(QUEUE_EXPIRE_SECONDS)}", (username,))
         row = c.execute(
-            "UPDATE jobs SET status = 'running', agent = ?, started_at = ? WHERE id = (SELECT id FROM jobs WHERE requested_by = ? "
-            "AND status = 'queued' ORDER BY id LIMIT 1) AND status = 'queued' RETURNING id, job, payload, created_at",
-            (host, store.now(), username)).fetchone()
+            f"UPDATE jobs SET status = 'running', agent = ?, started_at = {db.now_sql()} WHERE id = (SELECT id FROM jobs "
+            "WHERE requested_by = ? AND status = 'queued' ORDER BY id LIMIT 1) AND status = 'queued' "
+            "RETURNING id, job, payload, created_at", (host, username)).fetchone()
     return dict(row) if row else None
 
 
@@ -100,19 +92,19 @@ def finish(job_id: int, result: dict) -> None:
             return value
 
         packed = pack(result)
-        c.execute("UPDATE jobs SET status = ?, result = ?, finished_at = ? WHERE id = ? AND status = 'running'",
-                  ("done" if result.get("ok") else "error", json.dumps(packed, ensure_ascii=False, default=str), store.now(), job_id))
+        c.execute(f"UPDATE jobs SET status = ?, result = ?, finished_at = {db.now_sql()} WHERE id = ? AND status = 'running'",
+                  ("done" if result.get("ok") else "error", json.dumps(packed, ensure_ascii=False, default=str), job_id))
 
 
 # ---- website ----------------------------------------------------------------------
 def enqueue(job: str, payload: dict, username: str) -> int:
     store.init()
     with store.connect() as c:
-        old = _ago(KEEP_DAYS * 86400)
-        c.execute("DELETE FROM job_files WHERE job_id IN (SELECT id FROM jobs WHERE created_at < ?)", (old,))
-        c.execute("DELETE FROM jobs WHERE created_at < ?", (old,))
-        return c.execute("INSERT INTO jobs(job, payload, requested_by, created_at) VALUES (?,?,?,?) RETURNING id",
-                         (job, json.dumps(payload, ensure_ascii=False, default=str), username, store.now())).fetchone()["id"]
+        old = db.now_sql(KEEP_DAYS * 86400)
+        c.execute(f"DELETE FROM job_files WHERE job_id IN (SELECT id FROM jobs WHERE created_at < {old})")
+        c.execute(f"DELETE FROM jobs WHERE created_at < {old}")
+        return c.execute(f"INSERT INTO jobs(job, payload, requested_by, created_at) VALUES (?, ?, ?, {db.now_sql()}) RETURNING id",
+                         (job, json.dumps(payload, ensure_ascii=False, default=str), username)).fetchone()["id"]
 
 
 def get(job_id: int) -> dict | None:
@@ -125,10 +117,10 @@ def get(job_id: int) -> dict | None:
 
 def cancel(job_id: int, only_queued: bool = True) -> bool:
     """Huỷ lệnh; only_queued: chỉ huỷ khi agent chưa nhận (trả về True nếu huỷ được)."""
+    states = "('queued')" if only_queued else "('queued', 'running')"
     with store.connect() as c:
-        row = c.execute("UPDATE jobs SET status = 'cancelled', finished_at = ? WHERE id = ? AND status " +
-                        ("= 'queued'" if only_queued else "IN ('queued', 'running')") + " RETURNING id",
-                        (store.now(), job_id)).fetchone()
+        row = c.execute(f"UPDATE jobs SET status = 'cancelled', finished_at = {db.now_sql()} WHERE id = ? AND status IN {states} "
+                        "RETURNING id", (job_id,)).fetchone()
     return row is not None
 
 

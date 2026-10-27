@@ -9,6 +9,7 @@ Không có L2M_TEST_DATABASE_URL thì chạy trên SQLite trong thư mục tạm
 """
 from __future__ import annotations
 
+import io
 import os
 import secrets
 import sys
@@ -108,6 +109,26 @@ def test_queued_cancel_only_before_pickup():
     assert jobs.claim("alice", HOST) is None
 
 
+def test_agent_zip_has_code_and_settings():
+    import json
+    import zipfile
+
+    from core import bundle
+
+    data = bundle.agent_zip("alice", "postgresql://u:pw@db.example/x")
+    dest = Path(tempfile.mkdtemp(prefix="l2m-agent-zip-"))
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        names = set(z.namelist())
+        z.extractall(dest)
+    for need in ("agent.bat", "run.bat", "requirements.txt", "tools/setup.ps1", "automation/agent.py", "core/jobs.py", "CHAY-AGENT.txt"):
+        assert need in names, need
+    assert not [n for n in names if n.startswith("data/") and n != "data/local.json"], names  # không kèm dữ liệu của máy tải
+    assert not [n for n in names if n.startswith(("tests/", ".streamlit/")) or "__pycache__" in n], names
+    local = json.loads((dest / "data" / "local.json").read_text(encoding="utf-8"))
+    assert local == {"database_url": "postgresql://u:pw@db.example/x", "agent_user": "alice"}
+    assert bundle.code_version(dest) == bundle.code_version(ROOT)  # website nhận ra agent tải từ nó là cùng bản
+
+
 # ---- website (cần CSDL chung) --------------------------------------------------------
 SCRIPT = """
 import streamlit as st
@@ -143,6 +164,41 @@ def test_website_without_agent_explains():
     assert any("agent.bat" in e.value for e in at.error), [e.value for e in at.error]
 
 
+def test_website_offers_agent_download():
+    """Chưa có agent: thanh bên + trang có nút tải agent; có agent cùng bản thì ẩn nút; agent bản khác thì báo + hiện lại."""
+    from streamlit.testing.v1 import AppTest
+
+    from core import bundle
+
+    _website_env()
+    sid = store.create_session("alice")
+
+    def page():
+        at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
+        at.session_state["auth_user"] = store.get_user("alice")
+        at.session_state["sid"] = sid  # app.py kiểm tra phiên đăng nhập
+        at.run()
+        at.switch_page("views/payment_errors.py").run()
+        assert not at.exception, at.exception
+        labels = [b.proto.label for b in at.get("download_button")]
+        return at, labels
+
+    jobs.agent_offline("alice")
+    at, labels = page()
+    assert labels.count("⬇ Tải agent cho máy này") == 2, labels  # thanh bên + trang
+    assert any("⚪" in c.value for c in at.sidebar.caption)
+    jobs.heartbeat("alice", "pc-alice", bundle.code_version())
+    jobs.agent_status("alice", fresh=True)
+    at, labels = page()
+    assert "⬇ Tải agent cho máy này" not in labels, labels
+    assert any("pc-alice" in c.value for c in at.sidebar.caption)
+    jobs.heartbeat("alice", "pc-alice", "old-version")
+    jobs.agent_status("alice", fresh=True)
+    at, labels = page()
+    assert labels.count("⬇ Tải agent cho máy này") == 1 and any("🟠" in c.value for c in at.sidebar.caption), labels
+    jobs.agent_offline("alice")
+
+
 def test_website_runs_via_agent():
     _website_env()
     stop = threading.Event()
@@ -155,6 +211,9 @@ def test_website_runs_via_agent():
         assert res and res["ok"], res
         assert Path(res["results"][0]["file"]).read_bytes() == b"PK fake web"
         assert any("test-pc" in c.value for c in at.caption), [c.value for c in at.caption]
+        from core import bundle
+
+        assert jobs.agent_status("alice", fresh=True)["version"] == bundle.code_version()  # agent báo bản code của nó
     finally:
         stop.set()
         worker.join(15)

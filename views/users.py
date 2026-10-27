@@ -1,6 +1,6 @@
 import streamlit as st
 
-from core import store
+from core import db, store
 from core.i18n import t
 from ui import auth, common
 
@@ -72,6 +72,8 @@ with c2:
                 st.success(t("Đã đặt lại mật khẩu."))
             except ValueError as e:
                 st.error(t(str(e)))
+    if db.is_remote():  # CSDL chung: bản local ghi thẳng vào CSDL, không cần token đồng bộ
+        st.stop()
     if st.button(t("🔐 Cấp token đồng bộ mới"), key=f"tok_{target}",
                  help=t("Dùng cho bản local của thành viên đẩy kết quả lên server. Cấp mới sẽ vô hiệu token cũ.")):
         st.session_state["new_token"] = (target, store.issue_token(target, auth.username()))

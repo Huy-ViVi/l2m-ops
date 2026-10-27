@@ -13,7 +13,7 @@ App gom các workflow vận hành Lineage2M SEA trước đây làm qua Claude C
 1. Đặt thư mục app ở **đường dẫn ngắn**, ví dụ `C:\L2M-Ops` hoặc `Documents\L2M-Ops`. Windows giới hạn đường dẫn 260 ký tự, để quá sâu sẽ lỗi khi nạp thư viện.
 2. Nháy đúp **`run.bat`**. Lần đầu app tự tạo môi trường Python và cài thư viện (mất vài phút), sau đó mở `http://localhost:8501`.
 
-Yêu cầu: Python 3.10+ và Microsoft Edge (có sẵn trên Windows).
+Yêu cầu: Windows 10/11, Microsoft Edge (có sẵn), mạng Internet ở lần chạy đầu. **Không cần cài Python trước**: `run.bat` / `agent.bat` gọi `tools\setup.ps1`, máy chưa có Python 3.10+ (64-bit) thì tự tải Python 3.13 bản portable chính thức (gói `python` trên NuGet của Microsoft, kiểm tra mã SHA256) vào thư mục `.python` của app — không cần quyền admin, không cài vào hệ thống, không đổi PATH. Các lần sau chỉ kiểm tra nhanh (dưới 1 giây); `requirements.txt` đổi thì tự cài thêm thư viện.
 
 ## Thiết lập lần đầu (trang Cài đặt)
 
@@ -71,8 +71,11 @@ Thay cho việc lấy một máy làm server: website chạy trên **Streamlit C
 | Agent (agent.bat) | Chạy các nút NC tool / MyTool bạn bấm trên website, ngay trên máy bạn | Cần VPN, Edge, phiên SSO của bạn; giữ cửa sổ mở |
 
 **Agent: bấm trên website, chạy trên máy bạn.** NC tool / MyTool chỉ vào được từ mạng công ty bằng SSO của từng người, nên website gửi lệnh vào CSDL chung (bảng `jobs`), agent trên máy *của chính người bấm* nhận lệnh, chạy `automation.runner` y như bản local (mở Edge trên màn hình người đó, vẫn tự bấm Register), đẩy log lên website mỗi giây và trả kết quả (file MyTool nằm ở bảng `job_files`).
-1. Trên máy có VPN: cài app (run.bat một lần), nối CSDL chung ở trang Cài đặt.
-2. Mở `agent.bat`, đăng nhập **một lần** bằng tài khoản L2M Ops (lưu ở `data/local.json`; `agent.bat --logout` để đổi tài khoản). Giữ cửa sổ mở.
+1. Admin tạo tài khoản riêng cho từng người (Quản lý thành viên). Lệnh đi theo tài khoản: dùng chung tài khoản thì lệnh chạy trên máy người khác.
+2. Người đó đăng nhập website, bấm **⬇ Tải agent cho máy này** (thanh bên trái — chỉ hiện khi chưa có agent hoặc agent chạy bản cũ). Zip do website tạo từ chính code của nó (`core/bundle.py`), kèm `data/local.json` đã điền địa chỉ CSDL chung và tài khoản người tải. Giải nén, nháy đúp **`agent.bat`**: tự cài Python + thư viện, không hỏi gì thêm. Bật VPN, giữ cửa sổ mở.
+   - Không tải từ website thì giải nén code app bất kỳ rồi mở `agent.bat`: agent hỏi địa chỉ CSDL (dán vào, ký tự không hiện) và tài khoản **một lần** (`agent.bat --logout` để đổi tài khoản).
+   - Agent báo bản code của nó (`bundle.code_version()`); khác bản của website thì thanh bên báo 🟠 và hiện lại nút tải để giải nén đè.
+   - Zip chứa mật khẩu CSDL: chỉ tài khoản Thành viên/Admin đã đăng nhập mới tải được; không gửi zip cho người khác.
 3. Trên website, các nút NC tool / MyTool bấm được khi agent đang chạy (trang hiện "🟢 … agent trên máy …"). Lệnh chỉ chạy trên agent của đúng người bấm; lệnh chờ quá 2 phút bị bỏ (không mở NC tool bất ngờ); đóng agent giữa chừng thì website báo mất liên lạc.
 - Không chạy cùng lúc thao tác tự động ở bản local và ở agent trên cùng một máy (dùng chung hồ sơ trình duyệt).
 - Ai có địa chỉ CSDL chung là có toàn quyền trên CSDL đó: chỉ đưa cho người trong team.
@@ -172,6 +175,7 @@ core/                  # logic thuần (không phụ thuộc UI)
   i18n.py, locales/    # đa ngôn ngữ: t("chuỗi tiếng Việt") + bản dịch en_*.py
   cowork_import.py     # nhập lịch sử setup từ Claude Cowork (skill package-creation)
   jobs.py              # hàng đợi lệnh website -> agent (CSDL chung)
+  bundle.py            # zip agent tải từ website + mã phiên bản code
 automation/            # Playwright: NC tool + MyTool (chạy tiến trình riêng); agent.py nhận lệnh từ website
 resources/item_ids.json  # Item ID nạp sẵn lần đầu (l2msa)
 data/                  # cài đặt, app.db, master + các phiên bản, phiên trình duyệt (không commit)

@@ -164,6 +164,17 @@ def connect():
         conn.close()
 
 
+def now_sql(seconds_ago: int = 0) -> str:
+    """Biểu thức SQL: giờ hiện tại *của CSDL* theo giờ team, dạng 'YYYY-MM-DD HH:MM:SS'. Dùng khi so mốc giờ do nhiều máy
+    ghi (website, agent): đồng hồ từng máy có thể lệch nhau, đồng hồ CSDL thì chỉ có một."""
+    hours = int(config.TEAM_TZ.utcoffset(None).total_seconds() // 3600)
+    seconds = int(seconds_ago)
+    if is_remote():
+        return (f"to_char((now() AT TIME ZONE 'UTC') + interval '{hours} hours' - interval '{seconds} seconds', "
+                "'YYYY-MM-DD HH24:MI:SS')")
+    return f"datetime('now', '{hours:+d} hours', '-{seconds} seconds')"
+
+
 def schema(sqlite_schema: str) -> str:
     """Schema viết cho SQLite -> Postgres khi cần."""
     if not is_remote():

@@ -154,7 +154,12 @@ def main() -> int:
         result = {"ok": False, "error": str(e), "kind": "network"}
     except Exception as e:  # noqa: BLE001 — trả lỗi về UI thay vì crash im lặng
         friendly = netcheck.explain(str(e))
-        if friendly:
+        if type(e).__name__ == "TargetClosedError":  # người dùng đóng cửa sổ Edge giữa chừng
+            message = t("Trình duyệt đã bị đóng trước khi thao tác xong. Chạy lại và giữ cửa sổ Edge mở tới khi log báo xong "
+                        "(nếu cửa sổ bật lên trên máy người khác: bạn đang dùng tài khoản của họ).")
+            log(f"✗ {message}")
+            result = {"ok": False, "error": message, "kind": "closed"}
+        elif friendly:
             log(f"✗ {friendly}")
             result = {"ok": False, "error": friendly, "kind": "network"}
         else:

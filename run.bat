@@ -1,12 +1,9 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-if not exist ".venv\Scripts\python.exe" (
-  echo [L2M Ops] Lan dau chay: dang tao moi truong Python va cai thu vien...
-  python -m venv .venv || goto :err
-  ".venv\Scripts\python.exe" -m pip install --upgrade pip >nul
-  ".venv\Scripts\python.exe" -m pip install -r requirements.txt || goto :err
-)
+rem Tu chuan bi moi truong: may chua co Python thi tu tai ban portable vao thu muc app (xem tools\setup.ps1).
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\setup.ps1"
+if errorlevel 1 goto :err
 if "%L2M_SERVER_ADDRESS%"=="" set L2M_SERVER_ADDRESS=localhost
 if /i "%L2M_APP_MODE%"=="team" (
   echo [L2M Ops - TEAM] Server cho ca team. Thanh vien truy cap http://^<IP may nay^>:8501 - xem IP o trang Cai dat.
@@ -19,5 +16,5 @@ goto :eof
 
 :err
 echo.
-echo Cai dat that bai. Kiem tra da cai Python 3.10+ va co mang Internet.
+echo Cai dat that bai (xem thong bao phia tren). Can mang Internet de tai Python va thu vien.
 pause

@@ -5,7 +5,7 @@ import time
 
 import streamlit as st
 
-from core import config, db, jobs, store
+from core import bundle, config, db, jobs, store
 from core.i18n import t
 
 LOCAL_USER = {"username": "local", "display_name": "Máy này", "role": "admin", "active": 1}
@@ -64,6 +64,15 @@ def automation_via_agent() -> bool:
 
 def automation_allowed() -> bool:
     return automation_local() or (automation_via_agent() and jobs.agent_status(username()) is not None)
+
+
+def agent_download_button(key: str) -> None:
+    """Zip agent riêng cho người đang đăng nhập (core/bundle.py): giải nén, nháy đúp agent.bat là chạy."""
+    name = username()
+    st.download_button(t("⬇ Tải agent cho máy này"), data=lambda: bundle.agent_zip(name, config.database_url()),
+                       file_name=f"L2M-Ops-agent-{name}.zip", mime="application/zip", key=key,
+                       help=t("Giải nén rồi nháy đúp agent.bat: lần đầu tự cài Python + thư viện; đã có sẵn địa chỉ CSDL chung "
+                              "và tài khoản của bạn. Không gửi file này cho người khác."))
 
 
 COOKIE = "l2m_sid"
@@ -162,6 +171,17 @@ def sidebar_user() -> None:
             if st.session_state.get("set_cookie"):
                 _js_cookie(st.session_state.pop("set_cookie"), store.SESSION_DAYS * 86400)
             st.markdown(f"**{u.get('display_name') or u['username']}**  \n{t(store.ROLES.get(u['role'], u['role']))} · `{u['username']}`")
+            if automation_via_agent():  # lệnh NC tool / MyTool đi theo tài khoản -> cho thấy rõ nó chạy trên máy nào
+                agent = jobs.agent_status(u["username"])
+                st.caption(t("🟢 Agent: máy **{host}**", host=agent["host"]) if agent else t("⚪ Chưa bật agent (agent.bat)"),
+                           help=t("Nút NC tool / MyTool trên website chạy trên máy đang mở agent.bat của tài khoản này. "
+                                  "Mỗi người dùng tài khoản riêng, nếu không lệnh sẽ chạy trên máy người khác."))
+                outdated = bool(agent) and agent.get("version") != bundle.code_version()
+                if outdated:
+                    st.caption(t("🟠 Agent đang chạy bản code khác website: tải agent bản mới, giải nén đè lên thư mục agent cũ "
+                                 "rồi mở lại agent.bat."))
+                if not agent or outdated:
+                    agent_download_button("agent_zip_sidebar")
             if st.button(t("Đăng xuất"), key="logout"):
                 logout()
                 st.rerun()
