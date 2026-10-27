@@ -1,0 +1,32 @@
+{
+  "_note": "Map trường logic -> ô trên form NC tool. 'labels' = chữ ở cột tiêu đề của dòng; 'selector' do Calibrate điền (ưu tiên hơn labels). Kind: text | select | choice (select hoặc radio) | radio.",
+  "goods_new": {
+    "admin_name": {"labels": ["Product name(admin)", "Product name (admin)", "Admin product name", "Product name"], "kind": "text"},
+    "customer_name": {"labels": ["Product name(customer)", "Product name (customer)", "Customer product name"], "kind": "text"},
+    "description": {"labels": ["Product description", "Description"], "kind": "text"},
+    "store_pg": {"labels": ["Store Product Key"], "kind": "select", "option": "VNG Store"},
+    "store_key": {"labels": ["Store Product Key"], "kind": "text"},
+    "reputation_score": {"labels": ["Payment Reputation Score", "Reputation Score"], "kind": "text"},
+    "base_price_cash": {"labels": ["Base price"], "kind": "text"},
+    "monetary_base_price": {"labels": ["Monetary base price"], "kind": "text"},
+    "purchase_type": {"labels": ["Purchase type"], "kind": "choice", "option": "General purchase"},
+    "subscription": {"labels": ["Subscription"], "kind": "choice", "option": "No"},
+    "delivery_confirm": {"labels": ["Need to delivery confirm"], "kind": "choice", "option": "Required"},
+    "refund_unit": {"labels": ["Refund unit"], "kind": "choice", "option": "Product"},
+    "inventory": {"labels": ["Inventory"], "kind": "choice", "option": "Not in use"},
+    "delivery_type": {"labels": ["Delivery type"], "kind": "choice", "option": "Not used"}
+  },
+  "limit_new": {
+    "name": {"labels": ["Limit name", "Name"], "kind": "text"},
+    "description": {"labels": ["Limit description", "Description"], "kind": "text"},
+    "subject": {"labels": ["Subject"], "kind": "choice", "option": "Product"},
+    "limit_type": {"labels": ["Type", "Limit type"], "kind": "choice", "option": "Purchase Limit"},
+    "user_type": {"labels": ["Application Standard"], "kind": "choice", "option": "Account"},
+    "duration_value": {"labels": ["Renewal unit", "Duration"], "kind": "text"},
+    "duration_unit": {"labels": ["Renewal unit", "Duration"], "kind": "select", "option": "Week"},
+    "limit_amount": {"labels": ["Limit amount", "Amount"], "kind": "text"},
+    "base_time": {"labels": ["Base Time Standard"], "kind": "choice", "option": "Base Time"},
+    "base_day": {"labels": ["Base Time Standard"], "kind": "select", "option": "Monday"}
+  },
+  "submit_buttons": ["Register", "Save", "Submit"]
+}
