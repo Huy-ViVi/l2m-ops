@@ -68,15 +68,29 @@ Thay cho việc lấy một máy làm server: website chạy trên **Streamlit C
 |---|---|---|
 | Website (Streamlit Cloud) | Mọi thứ. Nút NC tool / MyTool chạy qua **agent** trên máy người bấm (mục dưới) | Máy chủ website không vào được NC tool / MyTool (`L2M_NO_AUTOMATION=1`) |
 | Bản local (run.bat) nối CSDL chung | Mọi thứ, kể cả thao tác tự động NC tool / MyTool (cần VPN + SSO trên máy đó) | Đăng nhập bằng tài khoản trên website; kết quả ghi thẳng vào CSDL chung |
-| Agent (agent.bat) | Chạy các nút NC tool / MyTool bạn bấm trên website, ngay trên máy bạn | Cần VPN, Edge, phiên SSO của bạn; giữ cửa sổ mở |
+| Agent (agent.bat) | Chạy các nút NC tool / MyTool bạn bấm trên website, ngay trên máy bạn | Cần VPN, Edge, phiên SSO của bạn; chạy ngầm, tự bật cùng Windows |
 
 **Agent: bấm trên website, chạy trên máy bạn.** NC tool / MyTool chỉ vào được từ mạng công ty bằng SSO của từng người, nên website gửi lệnh vào CSDL chung (bảng `jobs`), agent trên máy *của chính người bấm* nhận lệnh, chạy `automation.runner` y như bản local (mở Edge trên màn hình người đó, vẫn tự bấm Register), đẩy log lên website mỗi giây và trả kết quả (file MyTool nằm ở bảng `job_files`).
 1. Admin tạo tài khoản riêng cho từng người (Quản lý thành viên). Lệnh đi theo tài khoản: dùng chung tài khoản thì lệnh chạy trên máy người khác.
-2. Người đó đăng nhập website, bấm **⬇ Tải agent cho máy này** (thanh bên trái — chỉ hiện khi chưa có agent hoặc agent chạy bản cũ). Zip do website tạo từ chính code của nó (`core/bundle.py`), kèm `data/local.json` đã điền địa chỉ CSDL chung và tài khoản người tải. Giải nén, nháy đúp **`agent.bat`**: tự cài Python + thư viện, không hỏi gì thêm. Bật VPN, giữ cửa sổ mở.
+2. Người đó đăng nhập website, bấm **⬇ Tải agent cho máy này** (thanh bên trái — chỉ hiện khi chưa có agent hoặc agent chạy bản cũ). Zip do website tạo từ chính code của nó (`core/bundle.py`), kèm `data/local.json` đã điền địa chỉ CSDL chung và tài khoản người tải. Giải nén, nháy đúp **`agent.bat`**: tự cài Python + thư viện, không hỏi gì thêm, bật agent chạy ngầm rồi tự đóng cửa sổ sau 10 giây. Bật VPN.
    - Không tải từ website thì giải nén code app bất kỳ rồi mở `agent.bat`: agent hỏi địa chỉ CSDL (dán vào, ký tự không hiện) và tài khoản **một lần** (`agent.bat --logout` để đổi tài khoản).
-   - Agent báo bản code của nó (`bundle.code_version()`); khác bản của website thì thanh bên báo 🟠 và hiện lại nút tải để giải nén đè.
+   - Agent báo bản code của nó (`bundle.code_version()`); khác bản của website thì thanh bên báo 🟠 và hiện lại nút tải để giải nén đè. Agent chạy ngầm cũng tự thấy website có bản mới (website ghi bản của nó vào bảng `agents`, dòng `~website`) và hiện thông báo.
    - Zip chứa mật khẩu CSDL: chỉ tài khoản Thành viên/Admin đã đăng nhập mới tải được; không gửi zip cho người khác.
-3. Trên website, các nút NC tool / MyTool bấm được khi agent đang chạy (trang hiện "🟢 … agent trên máy …"). Lệnh chỉ chạy trên agent của đúng người bấm; lệnh chờ quá 2 phút bị bỏ (không mở NC tool bất ngờ); đóng agent giữa chừng thì website báo mất liên lạc.
+3. Trên website, các nút NC tool / MyTool bấm được khi agent đang chạy (trang hiện "🟢 … agent trên máy …"). Lệnh chỉ chạy trên agent của đúng người bấm; lệnh chờ quá 2 phút bị bỏ (không mở NC tool bất ngờ); tắt agent giữa chừng thì website báo mất liên lạc.
+
+**Kiểm tra máy sau khi đăng nhập website** (`ui/agent_setup.py`; nút **Kiểm tra máy** ở thanh bên chạy lại bất cứ lúc nào). Website ở Mỹ không đọc được máy người dùng, nên agent tự kiểm tra máy mỗi phút (có Edge, vào được NC tool / MyTool — tức VPN đang bật, đã bật tự chạy cùng Windows, đã đăng ký link) rồi ghi vào CSDL (bảng `agents`, cột `checks`):
+- Agent đang chạy và máy ổn → báo "Máy … đã đủ điều kiện".
+- Agent chạy nhưng còn thiếu (VPN tắt, agent bản cũ, thiếu Edge) → hộp hướng dẫn sửa từng mục; **Kiểm tra lại** nhờ agent kiểm tra ngay (không chờ hết phút).
+- Tài khoản đã cài agent nhưng agent đang tắt → website tự mở link **`l2mops-agent://start`** (agent.bat đăng ký link này trong `HKCU\Software\Classes`, không cần admin). Trình duyệt hỏi *"This site is trying to open L2M Ops Agent"* → tick **Always allow** → **Open**; agent bật lên và báo về. Quá 25 giây không thấy → hộp hướng dẫn cài đặt.
+- Chưa có agent → hộp **hướng dẫn cài đặt bằng hình** (7 bước, vẽ bằng SVG trong `ui/guide_art.py`, có tên tài khoản và địa chỉ website của người xem) + nút tải agent + nút **▶ Bật agent**.
+- Mở website trên máy không phải Windows → chỉ báo một dòng (xem/sửa dữ liệu bình thường).
+
+**Agent chạy ngầm** (`automation/agent.py --background`, phần Windows ở `automation/desktop.py`, chỉ dùng thư viện có sẵn):
+- Tiến trình `pythonw` không có cửa sổ; log ghi vào `data\agent.log`, trạng thái ở `data\agent.json`. Mỗi thư mục agent chỉ chạy một bản (mutex có tên).
+- Một **chấm tròn ở khay hệ thống** (góc phải thanh tác vụ, Windows 11 có thể giấu trong nút ^): xanh lá = đang chờ lệnh, xanh dương = đang chạy lệnh, cam = mất kết nối CSDL / có bản mới. Bấm vào: mở **cửa sổ log**. Chuột phải: Hiện cửa sổ agent · Mở website · Tự bật cùng Windows · Tắt agent (đang chạy lệnh thì hỏi lại).
+- **Hiện lại cửa sổ khi cần**, cách nào cũng được: bấm chấm tròn; bấm **Hiện cửa sổ agent** ở thanh bên website (cửa sổ hiện trên máy agent sau vài giây); hoặc mở lại `agent.bat` (cửa sổ đó thành cửa sổ log). Đóng cửa sổ log **không** tắt agent.
+- **Tự bật cùng Windows**: `agent.bat` ghi khoá `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` của người dùng (không cần admin; thấy trong Task Manager → Startup apps). Tắt/bật ở menu chuột phải; lựa chọn được nhớ trong `data\local.json`.
+- `agent.bat --stop` tắt agent; `agent.bat --foreground` chạy trong cửa sổ như bản cũ (đóng cửa sổ là tắt). Giải nén code mới đè lên rồi mở `agent.bat`: agent cũ tự tắt trước khi cài thư viện, bản mới bật lại.
 - Không chạy cùng lúc thao tác tự động ở bản local và ở agent trên cùng một máy (dùng chung hồ sơ trình duyệt).
 - Ai có địa chỉ CSDL chung là có toàn quyền trên CSDL đó: chỉ đưa cho người trong team.
 
@@ -97,7 +111,7 @@ Script chép tài khoản (giữ nguyên mật khẩu), lịch sử + file, Item
 
 **Lưu ý gói miễn phí:** website ngủ khi lâu không ai vào (người vào đầu chờ khoảng 1 phút); Supabase tạm dừng project nếu 7 ngày không dùng (vào trang quản lý bấm Restore). Máy thành viên đã có `.venv` từ trước cần cài thêm thư viện: `.venv\Scripts\python.exe -m pip install -r requirements.txt`.
 
-Test chế độ CSDL chung trên một schema tạm (tự xoá khi xong): đặt `L2M_TEST_DATABASE_URL` rồi chạy `tests\test_shared_db.py` và `tests\test_jobs.py` (thêm `L2M_TEST_BROWSER=1` để chạy một lượt thật website → agent → Edge ẩn trên trang NC tool giả lập).
+Test chế độ CSDL chung trên một schema tạm (tự xoá khi xong): đặt `L2M_TEST_DATABASE_URL` rồi chạy `tests\test_shared_db.py`, `tests\test_jobs.py` (thêm `L2M_TEST_BROWSER=1` để chạy một lượt thật website → agent → Edge ẩn trên trang NC tool giả lập) và `tests\test_agent_background.py` (bật agent chạy ngầm thật: thấy chấm tròn ở khay, một thông báo và cửa sổ log hiện lên rồi tự đóng; khoá Run dùng khoá registry tạm, không đụng khoá thật).
 
 Mọi mốc thời gian ghi vào CSDL / hiển thị theo giờ Việt Nam (UTC+7, `config.now()`), vì máy chủ website chạy giờ UTC.
 
@@ -151,7 +165,9 @@ Chọn ở ô **🌐 Language** trên cùng thanh bên trái, kể cả ở tran
 - `tests/test_item_lookup_mock.py`: Tra Item lookup trên trang giả lập giống trang thật (app group mặc định là game khác, bảng form nằm trên bảng kết quả).
 - `tests/test_nc_tool_mock.py`: tra Item ID bằng POST (cắt tên 40 ký tự, loại item 83/“Wrong”), tải toàn bộ danh sách item, tạo product + limit trên trang giả lập NC tool.
 - `tests/test_i18n.py`: mọi chữ hiển thị đều có bản dịch tiếng Anh, chỗ `{}` khớp nhau, không dịch trùng lệch.
-- `tests/test_jobs.py`: hàng đợi website → agent (chỉ chạy lệnh của đúng người, một máy nhận, hết hạn, huỷ giữa chừng, chuyển file kết quả); với CSDL chung: website chờ agent và hiện log, và một lượt thật qua Edge ẩn.
+- `tests/test_jobs.py`: hàng đợi website → agent (chỉ chạy lệnh của đúng người, một máy nhận, hết hạn, huỷ giữa chừng, chuyển file kết quả, lệnh "hiện cửa sổ"); với CSDL chung: website chờ agent và hiện log, nút Hiện cửa sổ agent, và một lượt thật qua Edge ẩn.
+- `tests/test_agent_background.py` (CSDL chung, Windows): agent chạy ngầm thật — sẵn sàng, chỉ một bản, chạy lệnh, mở cửa sổ log từ website và từ khay, bật/tắt tự chạy cùng Windows, báo bản mới, `--stop`; luồng `agent.bat` (lần đầu, mở lại khi đang chạy, tự tắt bản cũ khi có code mới); link `…://start` / `…://show` bật agent và hiện cửa sổ (dùng một tên link thử, xoá khi xong).
+- `tests/test_jobs.py` phần kiểm tra máy sau đăng nhập: máy đủ điều kiện, thiếu VPN (+ Kiểm tra lại), người mới (hộp 7 hình + nút tải), agent đã cài nhưng tắt (website bấm link rồi chờ).
 - Chế độ team đã chạy thử trên trình duyệt ở `localhost`. **Chưa thử truy cập từ máy khác trong LAN** (cần máy thứ hai và tường lửa cho phép).
 - **Chưa chạy trên tool thật** (NC Billing Admin, MyTool). Cần đăng nhập rồi Calibrate. Lần đầu nên chạy chế độ "tôi tự bấm Register" và đối chiếu kỹ.
 - Định dạng ngày trên MyTool đang giả định `DD/MM/YYYY`. Nếu MyTool hiển thị `MM/DD`, cần chỉnh lại `core/webshop_audit.py`.
@@ -164,6 +180,8 @@ run.bat / run-team.bat # chạy cá nhân / chạy làm server cho team
 agent.bat              # agent: chạy trên máy bạn các nút NC tool / MyTool bấm trên website
 views/                 # 3 function + Lịch sử, Dữ liệu dùng chung, Thành viên, Cài đặt
 ui/                    # thành phần UI dùng chung, đăng nhập & phân quyền (auth.py)
+  agent_setup.py       # sau đăng nhập website: kiểm tra máy, tự bật agent, hộp hướng dẫn cài đặt / sửa
+  guide_art.py         # hình hướng dẫn cài agent (SVG vẽ bằng code, dịch được)
 core/                  # logic thuần (không phụ thuộc UI)
   master.py            # đọc master All Product Information (dò cột theo tên header)
   payment_errors.py    # Task 10
@@ -177,6 +195,7 @@ core/                  # logic thuần (không phụ thuộc UI)
   jobs.py              # hàng đợi lệnh website -> agent (CSDL chung)
   bundle.py            # zip agent tải từ website + mã phiên bản code
 automation/            # Playwright: NC tool + MyTool (chạy tiến trình riêng); agent.py nhận lệnh từ website
+  desktop.py           # Windows cho agent chạy ngầm: biểu tượng khay, chạy một bản, tự bật cùng Windows, cửa sổ log
 resources/item_ids.json  # Item ID nạp sẵn lần đầu (l2msa)
 data/                  # cài đặt, app.db, master + các phiên bản, phiên trình duyệt (không commit)
 ```

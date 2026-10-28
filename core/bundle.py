@@ -37,18 +37,23 @@ def code_version(root: Path = config.APP_ROOT) -> str:
     return h.hexdigest()[:12]
 
 
-def agent_zip(username: str, database_url: str, root: Path = config.APP_ROOT) -> bytes:
-    """Zip cài agent cho một tài khoản. Chứa mật khẩu CSDL: chỉ đưa cho đúng người đã đăng nhập."""
+def agent_zip(username: str, database_url: str, root: Path = config.APP_ROOT, site_url: str = "") -> bytes:
+    """Zip cài agent cho một tài khoản. Chứa mật khẩu CSDL: chỉ đưa cho đúng người đã đăng nhập.
+    site_url: địa chỉ website (mục "Mở website" ở menu biểu tượng khay)."""
+    local = {"database_url": database_url, "agent_user": username, **({"site_url": site_url} if site_url else {})}
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for p in code_files(root):
             z.write(p, p.relative_to(root).as_posix())
-        z.writestr("data/local.json", json.dumps({"database_url": database_url, "agent_user": username}, ensure_ascii=False, indent=2))
+        z.writestr("data/local.json", json.dumps(local, ensure_ascii=False, indent=2))
         z.writestr("CHAY-AGENT.txt", (
             "L2M Ops Agent\r\n\r\n"
             "1. Bat VPN cong ty.\r\n"
             "2. Nhay dup agent.bat. Lan dau tu cai Python + thu vien (vai phut, can Internet).\r\n"
-            "3. Giu cua so agent mo trong luc dung website.\r\n\r\n"
+            "3. Agent chay ngam: cham tron o khay he thong (goc phai thanh tac vu, co the nam trong nut ^).\r\n"
+            "   Bam vao cham tron de xem cua so log; chuot phai de tat agent. Agent tu bat cung Windows.\r\n"
+            "   Mo lai agent.bat hoac bam 'Hien cua so agent' tren website cung hien cua so log.\r\n"
+            "4. Agent dang tat thi website tu bat: trinh duyet hoi mo 'L2M Ops Agent' -> tick Always allow -> Open.\r\n\r\n"
             f"Agent nay chay lenh cua tai khoan '{username}'. Khong gui thu muc nay cho nguoi khac\r\n"
             "(co san dia chi CSDL chung va tai khoan cua ban).\r\n"))
     return buf.getvalue()

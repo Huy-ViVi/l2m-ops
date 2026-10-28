@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS job_files (
     id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL, name TEXT NOT NULL, content BLOB NOT NULL
 );
 CREATE TABLE IF NOT EXISTS agents (
-    username TEXT PRIMARY KEY, host TEXT, seen_at TEXT, version TEXT
+    username TEXT PRIMARY KEY, host TEXT, seen_at TEXT, version TEXT, checks TEXT
 );
 """
 SESSION_DAYS = 14
@@ -143,6 +143,9 @@ def _migrate(c) -> None:
     for col in ("game_item_key", "note"):
         if col not in cols:
             c.execute(f"ALTER TABLE item_ids ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+    if "checks" not in _columns(c, "agents"):  # agent báo kết quả kiểm tra máy (Edge, VPN, …) cho website
+        # Postgres: website và các agent có thể nâng cấp cùng lúc -> IF NOT EXISTS (SQLite không có cú pháp này)
+        c.execute("ALTER TABLE agents ADD COLUMN " + ("IF NOT EXISTS " if db.is_remote() else "") + "checks TEXT")
 
 
 SEED_FILES = {"l2m": ("item_ids.json",)}  # Item ID có sẵn theo game (resources/)

@@ -22,17 +22,23 @@ QUEUE_EXPIRE_SECONDS = 120  # lệnh chờ quá lâu thì agent bỏ qua, tránh
 KEEP_DAYS = 7              # xoá lệnh cũ (kèm file) sau chừng này ngày
 FILE_PREFIX = "jobfile://"
 FINISHED = ("done", "error", "expired", "cancelled")
+CONTROL_PREFIX = "agent:"  # lệnh điều khiển agent (không chạy automation.runner)
+SHOW_WINDOW = "agent:show"  # nút "Hiện cửa sổ agent" trên website
+CHECK_MACHINE = "agent:check"  # nút "Kiểm tra lại": agent tự kiểm tra máy ngay (không chờ nhịp 1 phút)
+SITE_ROW = "~website"       # dòng trong bảng agents lưu bản code của website (agent so để báo có bản mới)
+PROTOCOL = "l2mops-agent"   # agent.bat đăng ký l2mops-agent:// trên máy: website bấm link này để bật agent
 
 _status_cache: dict[str, tuple[float, dict | None]] = {}
 
 
 # ---- agent ------------------------------------------------------------------------
-def heartbeat(username: str, host: str, version: str = "") -> None:
+def heartbeat(username: str, host: str, version: str = "", checks: dict | None = None) -> None:
+    """checks: kết quả agent tự kiểm tra máy (vd {'edge': True, 'nc_tool': False}) — website dùng để báo máy đủ điều kiện."""
     store.init()
     with store.connect() as c:
-        c.execute(f"INSERT INTO agents(username, host, seen_at, version) VALUES (?, ?, {db.now_sql()}, ?) ON CONFLICT(username) "
-                  "DO UPDATE SET host = excluded.host, seen_at = excluded.seen_at, version = excluded.version",
-                  (username, host, version))
+        c.execute(f"INSERT INTO agents(username, host, seen_at, version, checks) VALUES (?, ?, {db.now_sql()}, ?, ?) "
+                  "ON CONFLICT(username) DO UPDATE SET host = excluded.host, seen_at = excluded.seen_at, version = excluded.version, "
+                  "checks = excluded.checks", (username, host, version, json.dumps(checks or {})))
 
 
 def agent_offline(username: str) -> None:
@@ -42,19 +48,35 @@ def agent_offline(username: str) -> None:
     _status_cache.pop(username, None)
 
 
+def _agent_row(row) -> dict:
+    try:
+        checks = json.loads(row["checks"] or "{}")
+    except (TypeError, ValueError):
+        checks = {}
+    return {"host": row["host"], "seen_at": row["seen_at"], "version": row["version"] or "", "checks": checks}
+
+
 def agent_status(username: str, fresh: bool = False) -> dict | None:
-    """Agent của tài khoản này nếu đang chạy: {'host', 'seen_at', 'version'}; None nếu chưa bật.
+    """Agent của tài khoản này nếu đang chạy: {'host', 'seen_at', 'version', 'checks'}; None nếu chưa bật.
     Nhớ 10 giây cho trang khỏi chờ CSDL."""
     hit = _status_cache.get(username)
     if hit and not fresh and time.monotonic() - hit[0] < HEARTBEAT_SECONDS:
         return hit[1]
     store.init()
     with store.connect() as c:
-        row = c.execute(f"SELECT host, seen_at, version FROM agents WHERE username = ? AND seen_at >= {db.now_sql(ONLINE_SECONDS)}",
-                        (username,)).fetchone()
-    value = {"host": row["host"], "seen_at": row["seen_at"], "version": row["version"] or ""} if row else None
+        row = c.execute(f"SELECT host, seen_at, version, checks FROM agents WHERE username = ? "
+                        f"AND seen_at >= {db.now_sql(ONLINE_SECONDS)}", (username,)).fetchone()
+    value = _agent_row(row) if row else None
     _status_cache[username] = (time.monotonic(), value)
     return value
+
+
+def agent_known(username: str) -> dict | None:
+    """Lần cuối agent của tài khoản này báo về (kể cả khi đã tắt): tài khoản đã từng cài agent ở máy nào."""
+    store.init()
+    with store.connect() as c:
+        row = c.execute("SELECT host, seen_at, version, checks FROM agents WHERE username = ?", (username,)).fetchone()
+    return _agent_row(row) if row else None
 
 
 def claim(username: str, host: str) -> dict | None:
@@ -65,9 +87,28 @@ def claim(username: str, host: str) -> dict | None:
                   f"AND created_at < {db.now_sql(QUEUE_EXPIRE_SECONDS)}", (username,))
         row = c.execute(
             f"UPDATE jobs SET status = 'running', agent = ?, started_at = {db.now_sql()} WHERE id = (SELECT id FROM jobs "
-            "WHERE requested_by = ? AND status = 'queued' ORDER BY id LIMIT 1) AND status = 'queued' "
-            "RETURNING id, job, payload, created_at", (host, username)).fetchone()
+            "WHERE requested_by = ? AND status = 'queued' AND job NOT LIKE ? ORDER BY id LIMIT 1) AND status = 'queued' "
+            "RETURNING id, job, payload, created_at", (host, username, CONTROL_PREFIX + "%")).fetchone()
     return dict(row) if row else None
+
+
+def claim_controls(username: str, host: str) -> set[str]:
+    """Agent nhận mọi lệnh điều khiển đang chờ (vd hiện cửa sổ, kiểm tra máy) — đánh dấu xong luôn. Trả về tên các lệnh."""
+    store.init()
+    with store.connect() as c:
+        rows = c.execute(
+            f"UPDATE jobs SET status = 'done', agent = ?, started_at = {db.now_sql()}, finished_at = {db.now_sql()} "
+            f"WHERE requested_by = ? AND job LIKE ? AND status = 'queued' AND created_at >= {db.now_sql(QUEUE_EXPIRE_SECONDS)} "
+            "RETURNING job", (host, username, CONTROL_PREFIX + "%")).fetchall()
+    return {r["job"] for r in rows}
+
+
+def site_version() -> str:
+    """Bản code website đang chạy ('' nếu website chưa báo)."""
+    store.init()
+    with store.connect() as c:
+        row = c.execute("SELECT version FROM agents WHERE username = ?", (SITE_ROW,)).fetchone()
+    return (row["version"] or "") if row else ""
 
 
 def append_log(job_id: int, text: str) -> None:
@@ -105,6 +146,20 @@ def enqueue(job: str, payload: dict, username: str) -> int:
         c.execute(f"DELETE FROM jobs WHERE created_at < {old}")
         return c.execute(f"INSERT INTO jobs(job, payload, requested_by, created_at) VALUES (?, ?, ?, {db.now_sql()}) RETURNING id",
                          (job, json.dumps(payload, ensure_ascii=False, default=str), username)).fetchone()["id"]
+
+
+def request_show(username: str) -> int:
+    """Nút "Hiện cửa sổ agent": agent của tài khoản này mở cửa sổ log trên máy của nó."""
+    return enqueue(SHOW_WINDOW, {}, username)
+
+
+def request_check(username: str) -> int:
+    """Nút "Kiểm tra lại": agent kiểm tra máy ngay (vd vừa bật VPN) rồi báo lên trong vài giây."""
+    return enqueue(CHECK_MACHINE, {}, username)
+
+
+def publish_site_version(version: str) -> None:
+    heartbeat(SITE_ROW, "website", version)
 
 
 def get(job_id: int) -> dict | None:

@@ -9,7 +9,7 @@ import streamlit as st
 
 from core import api_server, config, db, store
 from core.i18n import t
-from ui import auth, common
+from ui import agent_setup, auth, common
 
 st.set_page_config(page_title="L2M Ops Toolkit", page_icon="🛠️", layout="wide")
 config.ensure_dirs()
@@ -34,6 +34,7 @@ common.language_selector()
 auth.require_login()
 common.game_selector()
 auth.sidebar_user()
+agent_setup.machine_check()  # website: máy người đăng nhập đã đủ điều kiện chạy NC tool / MyTool chưa (agent)
 
 pages = {
     "": [st.Page("views/home.py", title=t("Trang chủ"), icon=":material/home:", default=True)],

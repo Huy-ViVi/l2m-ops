@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from urllib.parse import urlsplit
 
 import streamlit as st
 
@@ -66,11 +67,35 @@ def automation_allowed() -> bool:
     return automation_local() or (automation_via_agent() and jobs.agent_status(username()) is not None)
 
 
-def agent_download_button(key: str) -> None:
+def site_url() -> str:
+    """Gốc địa chỉ website đang mở (vd https://….streamlit.app) — cho mục "Mở website" ở biểu tượng khay của agent."""
+    try:
+        parts = urlsplit(st.context.url or "")
+    except Exception:  # noqa: BLE001
+        return ""
+    return f"{parts.scheme}://{parts.netloc}" if parts.scheme in ("http", "https") and parts.netloc else ""
+
+
+_published: set[str] = set()
+
+
+def _publish_site_version() -> None:
+    """Website ghi bản code của nó vào CSDL (một lần mỗi tiến trình): agent chạy ngầm so để báo có bản mới."""
+    version = bundle.code_version()
+    if version not in _published:
+        try:
+            jobs.publish_site_version(version)
+            _published.add(version)
+        except Exception:  # noqa: BLE001 — chỉ là thông báo, lần tải trang sau thử lại
+            pass
+
+
+def agent_download_button(key: str, primary: bool = False) -> None:
     """Zip agent riêng cho người đang đăng nhập (core/bundle.py): giải nén, nháy đúp agent.bat là chạy."""
-    name = username()
-    st.download_button(t("⬇ Tải agent cho máy này"), data=lambda: bundle.agent_zip(name, config.database_url()),
-                       file_name=f"L2M-Ops-agent-{name}.zip", mime="application/zip", key=key,
+    name, site = username(), site_url()
+    st.download_button(t("⬇ Tải agent cho máy này"), data=lambda: bundle.agent_zip(name, config.database_url(), site_url=site),
+                       file_name=f"L2M-Ops-agent-{name}.zip", mime="application/zip", key=key, on_click="ignore",
+                       type="primary" if primary else "secondary",
                        help=t("Giải nén rồi nháy đúp agent.bat: lần đầu tự cài Python + thư viện; đã có sẵn địa chỉ CSDL chung "
                               "và tài khoản của bạn. Không gửi file này cho người khác."))
 
@@ -85,6 +110,7 @@ def _js_cookie(value: str, max_age: int) -> None:
 
 def _sign_in(u: dict) -> None:
     st.session_state["auth_user"] = u
+    st.session_state.pop("machine_check", None)  # vừa đăng nhập: kiểm tra máy lại (ui/agent_setup.py)
     sid = store.create_session(u["username"])
     st.session_state["sid"] = sid
     st.session_state["set_cookie"] = sid
@@ -172,9 +198,11 @@ def sidebar_user() -> None:
                 _js_cookie(st.session_state.pop("set_cookie"), store.SESSION_DAYS * 86400)
             st.markdown(f"**{u.get('display_name') or u['username']}**  \n{t(store.ROLES.get(u['role'], u['role']))} · `{u['username']}`")
             if automation_via_agent():  # lệnh NC tool / MyTool đi theo tài khoản -> cho thấy rõ nó chạy trên máy nào
+                if config.env("L2M_PUBLIC") == "1":
+                    _publish_site_version()
                 agent = jobs.agent_status(u["username"])
                 st.caption(t("🟢 Agent: máy **{host}**", host=agent["host"]) if agent else t("⚪ Chưa bật agent (agent.bat)"),
-                           help=t("Nút NC tool / MyTool trên website chạy trên máy đang mở agent.bat của tài khoản này. "
+                           help=t("Nút NC tool / MyTool trên website chạy trên máy đang chạy agent của tài khoản này. "
                                   "Mỗi người dùng tài khoản riêng, nếu không lệnh sẽ chạy trên máy người khác."))
                 outdated = bool(agent) and agent.get("version") != bundle.code_version()
                 if outdated:
@@ -182,6 +210,14 @@ def sidebar_user() -> None:
                                  "rồi mở lại agent.bat."))
                 if not agent or outdated:
                     agent_download_button("agent_zip_sidebar")
+                elif st.button(t("Hiện cửa sổ agent"), key="agent_show", icon=":material/open_in_new:",
+                               help=t("Agent chạy ngầm trên máy {host}. Bấm để mở cửa sổ log của nó trên máy đó "
+                                      "(đóng cửa sổ log không tắt agent).", host=agent["host"])):
+                    jobs.request_show(u["username"])
+                    st.toast(t("Đã gửi — cửa sổ agent sẽ hiện trên máy {host} sau vài giây.", host=agent["host"]))
+                st.button(t("Kiểm tra máy"), key="machine_recheck", icon=":material/fact_check:", type="tertiary",
+                          on_click=lambda: st.session_state.pop("machine_check", None),  # ui/agent_setup.py chạy lại từ đầu
+                          help=t("Kiểm tra máy bạn đã đủ điều kiện chạy NC tool / MyTool chưa; thiếu gì sẽ hiện hướng dẫn."))
             if st.button(t("Đăng xuất"), key="logout"):
                 logout()
                 st.rerun()

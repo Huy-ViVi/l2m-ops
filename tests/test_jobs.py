@@ -109,6 +109,50 @@ def test_queued_cancel_only_before_pickup():
     assert jobs.claim("alice", HOST) is None
 
 
+def test_control_job_not_given_to_runner():
+    """Nút "Hiện cửa sổ agent": vòng nhận lệnh bỏ qua, chỉ luồng heartbeat nhận (kể cả khi đang chạy lệnh dài)."""
+    jid = jobs.request_show("alice")
+    jobs.request_check("alice")
+    assert jobs.claim("alice", HOST) is None
+    assert jobs.claim_controls("alice", HOST) == {jobs.SHOW_WINDOW, jobs.CHECK_MACHINE}
+    assert jobs.get(jid)["status"] == "done"
+    assert not jobs.claim_controls("alice", HOST)
+
+
+def test_heartbeat_opens_window_on_request():
+    class FakeUI:
+        shown = 0
+        connected = site = None
+
+        def show(self):
+            self.shown += 1
+
+        def set_connected(self, ok):
+            self.connected = ok
+
+        def site_version(self, version):
+            self.site = version
+
+    ui = FakeUI()
+    jobs.publish_site_version("site-v1")
+    beat = agent.Heartbeat("alice", HOST, ui)
+    beat.start()
+    try:
+        jobs.request_show("alice")
+        assert _wait(lambda: ui.shown == 1, 15), "agent không mở cửa sổ khi website yêu cầu"
+        assert _wait(lambda: ui.site == "site-v1", 15) and ui.connected is True, (ui.site, ui.connected)
+        # agent tự kiểm tra máy rồi báo lên; "Kiểm tra lại" trên website -> kiểm tra lại ngay (mốc giờ mới)
+        assert _wait(lambda: "at" in jobs.agent_status("alice", fresh=True)["checks"], 20), jobs.agent_status("alice", fresh=True)
+        checks = jobs.agent_status("alice", fresh=True)["checks"]
+        assert {"nc_tool", "mytool", "edge", "autostart", "protocol"} <= set(checks), checks
+        time.sleep(1.1)
+        jobs.request_check("alice")
+        assert _wait(lambda: jobs.agent_status("alice", fresh=True)["checks"]["at"] != checks["at"], 20), "không kiểm tra lại"
+    finally:
+        beat.stop()
+        beat.join(10)
+
+
 def test_agent_zip_has_code_and_settings():
     import json
     import zipfile
@@ -177,6 +221,7 @@ def test_website_offers_agent_download():
         at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
         at.session_state["auth_user"] = store.get_user("alice")
         at.session_state["sid"] = sid  # app.py kiểm tra phiên đăng nhập
+        at.session_state["machine_check"] = "done"  # test này chỉ xem thanh bên, không mở hộp kiểm tra máy
         at.run()
         at.switch_page("views/payment_errors.py").run()
         assert not at.exception, at.exception
@@ -192,11 +237,108 @@ def test_website_offers_agent_download():
     at, labels = page()
     assert "⬇ Tải agent cho máy này" not in labels, labels
     assert any("pc-alice" in c.value for c in at.sidebar.caption)
+    assert jobs.site_version() == bundle.code_version()  # website báo bản code của nó cho agent chạy ngầm
+    at.button(key="agent_show").click().run()  # "Hiện cửa sổ agent" -> lệnh điều khiển cho agent của alice
+    assert not at.exception, at.exception
+    assert jobs.SHOW_WINDOW in jobs.claim_controls("alice", "pc-alice")
     jobs.heartbeat("alice", "pc-alice", "old-version")
     jobs.agent_status("alice", fresh=True)
     at, labels = page()
     assert labels.count("⬇ Tải agent cho máy này") == 1 and any("🟠" in c.value for c in at.sidebar.caption), labels
     jobs.agent_offline("alice")
+
+
+def _after_login(username: str):
+    """Trang đầu tiên sau khi đăng nhập website (app.py chạy kiểm tra máy — ui/agent_setup.py)."""
+    from streamlit.testing.v1 import AppTest
+
+    if not store.get_user(username):
+        store.create_user(username, username.title(), "test-password-123", "member", by="test")
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
+    at.session_state["auth_user"] = store.get_user(username)
+    at.session_state["sid"] = store.create_session(username)
+    at.run()
+    assert not at.exception, at.exception
+    return at
+
+
+def _texts(at) -> str:
+    return "\n".join(e.value for kind in ("markdown", "caption", "info", "warning", "success", "toast") for e in at.get(kind))
+
+
+GOOD = {"edge": True, "nc_tool": True, "mytool": True, "autostart": True, "protocol": True, "at": "2026-10-28 09:00:00"}
+
+
+def test_website_check_machine_ready():
+    """Agent đang chạy, máy ổn -> báo đủ điều kiện, không mở hộp thoại."""
+    from core import bundle
+
+    _website_env()
+    jobs.heartbeat("ready1", "pc-ready", bundle.code_version(), GOOD)
+    at = _after_login("ready1")
+    toasts = [e.value for e in at.get("toast")]
+    assert any("pc-ready" in v and "đủ điều kiện" in v for v in toasts), toasts
+    assert not at.get("dialog")
+    at.run()  # lượt sau (bấm gì đó trên trang): không báo lại
+    assert not at.get("toast")
+    at.button(key="machine_recheck").click().run()  # "Kiểm tra máy" ở thanh bên -> kiểm tra lại
+    assert any("đủ điều kiện" in e.value for e in at.get("toast"))
+    jobs.agent_offline("ready1")
+
+
+def test_website_check_machine_needs_vpn():
+    """Agent chạy nhưng không vào được NC tool -> hộp hướng dẫn bật VPN; "Kiểm tra lại" gửi lệnh cho agent."""
+    from core import bundle
+
+    _website_env()
+    from streamlit.testing.v1 import AppTest
+
+    _website_env()
+    jobs.heartbeat("vpn1", "pc-vpn", bundle.code_version(), {**GOOD, "nc_tool": False})
+    at = _after_login("vpn1")
+    assert at.get("dialog"), "không mở hộp hướng dẫn"
+    assert "Chưa vào được NC tool" in _texts(at) and "Bật VPN công ty trên máy pc-vpn" in _texts(at), _texts(at)
+    # Bấm nút trong hộp: trên website chỉ hộp chạy lại; AppTest chạy lại cả script nên dùng script mở hộp mỗi lượt.
+    fix = AppTest.from_string("from ui import agent_setup\nagent_setup._open_fix('pc-vpn')\n", default_timeout=60)
+    fix.session_state["auth_user"] = store.get_user("vpn1")
+    fix.run()
+    # người dùng vừa bật VPN; agent nhận lệnh kiểm tra lại và báo kết quả mới sau vài giây
+    threading.Timer(2, jobs.heartbeat, ("vpn1", "pc-vpn", bundle.code_version(), {**GOOD, "at": "2026-10-28 09:05:00"})).start()
+    fix.button(key="fix_recheck").click().run()
+    assert not fix.exception, fix.exception
+    assert jobs.CHECK_MACHINE in jobs.claim_controls("vpn1", "pc-vpn")  # website nhờ agent kiểm tra lại ngay
+    assert "đủ điều kiện" in _texts(fix), _texts(fix)
+    jobs.agent_offline("vpn1")
+
+
+def test_website_check_machine_new_user():
+    """Chưa từng cài agent -> hộp hướng dẫn cài đặt: 7 hình + nút tải zip + nút bật agent."""
+    _website_env()
+    at = _after_login("new1")
+    assert at.get("dialog"), "không mở hộp hướng dẫn"
+    assert len(at.get("image")) == 7, len(at.get("image"))
+    assert [b.proto.label for b in at.get("download_button")].count("⬇ Tải agent cho máy này") == 2  # thanh bên + hộp hướng dẫn
+    assert any(f"{jobs.PROTOCOL}://start" in h.proto.body for h in at.get("html")), "thiếu nút bật agent"
+    assert "Cài một lần" in _texts(at)
+
+
+def test_website_check_machine_starts_installed_agent():
+    """Đã cài agent nhưng đang tắt -> website bấm l2mops-agent://start rồi chờ; agent báo về -> báo đủ điều kiện."""
+    from core import bundle
+
+    _website_env()
+    jobs.heartbeat("known1", "pc-known", bundle.code_version(), GOOD)
+    jobs.agent_offline("known1")
+    at = _after_login("known1")
+    assert at.session_state["machine_check"] == "starting"
+    assert any(f"{jobs.PROTOCOL}://start" in h.proto.body and "<script" in h.proto.body for h in at.get("html"))
+    assert "Đang bật agent trên máy bạn" in _texts(at)
+    assert not at.get("dialog")
+    jobs.heartbeat("known1", "pc-known", bundle.code_version(), GOOD)  # trình duyệt đã mở agent, agent báo về
+    at.run()
+    assert at.session_state["machine_check"] == "done"
+    assert any("pc-known" in e.value and "đủ điều kiện" in e.value for e in at.get("toast")), _texts(at)
+    jobs.agent_offline("known1")
 
 
 def test_website_runs_via_agent():

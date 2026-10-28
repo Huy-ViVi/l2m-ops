@@ -358,7 +358,8 @@ def automation_reason() -> str:
     if auth.automation_via_agent():  # website, hoặc mở app từ máy khác
         return t("Chưa thấy agent trên máy bạn. Thao tác NC tool / MyTool cần VPN công ty và phiên SSO của chính bạn, nên website "
                  "gửi lệnh về máy bạn chạy. Lần đầu: bấm **⬇ Tải agent cho máy này**, giải nén, nháy đúp **agent.bat** (tự cài "
-                 "mọi thứ, có sẵn tài khoản của bạn), bật VPN và giữ cửa sổ đó mở. Tải lại trang này sau vài giây.")
+                 "mọi thứ, có sẵn tài khoản của bạn) và bật VPN. Agent chạy ngầm (chấm tròn ở khay hệ thống) và tự bật cùng "
+                 "Windows. Tải lại trang này sau vài giây.")
     if config.team_mode():
         return t("Thao tác tự động dùng phiên đăng nhập MyTool/NC tool của chính bạn, nên phải chạy trên máy bạn: "
                  "mở bản local của app (run.bat), cấu hình server team ở trang Cài đặt — kết quả sẽ tự đẩy lên đây. "
@@ -371,7 +372,12 @@ def automation_notice() -> bool:
     if reason:
         st.info(reason)
         if auth.automation_via_agent():
-            auth.agent_download_button("agent_zip_notice")  # mỗi trang gọi automation_notice một lần
+            from ui import agent_setup
+
+            with st.container(horizontal=True):
+                auth.agent_download_button("agent_zip_notice")  # mỗi trang gọi automation_notice một lần
+                st.button(t("Hướng dẫn cài agent"), key="agent_guide_notice", icon=":material/menu_book:",
+                          on_click=agent_setup.open_guide)
     elif not auth.automation_local():
         agent = jobs.agent_status(auth.username()) or {}
         st.caption(t("🟢 Thao tác tự động chạy trên máy **{host}** (agent của tài khoản **{user}**). Không phải máy của bạn? "
@@ -424,14 +430,14 @@ def _run_via_agent(job: str, payload: dict, title: str) -> dict | None:
                     else t("Tiến trình automation không trả kết quả — xem log phía trên.")}
                 break
             if row["status"] == "queued" and elapsed > AGENT_PICKUP_SECONDS and jobs.cancel(jid):
-                result = {"ok": False, "error": t("Agent trên máy {host} không nhận lệnh. Kiểm tra cửa sổ agent.bat còn mở và máy còn mạng, "
-                                                  "rồi bấm lại.", host=agent["host"])}
+                result = {"ok": False, "error": t("Agent trên máy {host} không nhận lệnh. Kiểm tra agent còn chạy (chấm tròn ở khay hệ "
+                                                  "thống) và máy còn mạng, rồi bấm lại.", host=agent["host"])}
                 break
             if time.monotonic() - last_check > 15:
                 last_check = time.monotonic()
                 if not jobs.agent_status(user, fresh=True):
                     jobs.cancel(jid, only_queued=False)
-                    result = {"ok": False, "error": t("Mất liên lạc với agent trên máy {host} (cửa sổ agent bị đóng hoặc máy mất mạng).",
+                    result = {"ok": False, "error": t("Mất liên lạc với agent trên máy {host} (agent bị tắt hoặc máy mất mạng).",
                                                       host=agent["host"])}
                     break
             if elapsed > AGENT_MAX_SECONDS:
