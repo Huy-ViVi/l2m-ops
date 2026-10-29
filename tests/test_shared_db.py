@@ -132,6 +132,21 @@ def test_masters():
     assert store.current_master("other") is None
 
 
+def test_plugin_records():
+    """Dữ liệu plugin (core.sdk) trên Postgres: ghi theo lô, chỉ ghi bản thay đổi, lịch sử sửa / xoá, thống kê."""
+    from core import sdk
+
+    with sdk.use("pg_plugin"):
+        rows = [{"id": f"k{i}", "product_key": "com.ncv.l2m.web.item 5", "n": i} for i in range(1200)]  # > 1 lô IN (...)
+        assert sdk.save("daily", rows) == 1200 and sdk.save("daily", rows) == 0
+        assert sdk.save("daily", {"id": "k7", "product_key": "web.item5", "n": 70}) == 1
+        assert len(sdk.load("daily")) == 1200 and sdk.get("daily", "k7")["n"] == 70
+        assert sdk.load("daily", n=70)[0]["product_key"] == "web.item5"
+        assert sdk.delete("daily", [f"k{i}" for i in range(600)]) == 600 and len(sdk.load("daily")) == 600
+        assert [h["action"] for h in sdk.history("daily", "k7")] == ["delete", "update"]
+        assert sdk.collections() == {"daily": 600}
+
+
 def test_cache_sees_other_machines():
     """Máy khác ghi thẳng vào CSDL -> máy này thấy sau tối đa CACHE_TTL giây."""
     import psycopg

@@ -127,8 +127,38 @@ Mọi mốc thời gian ghi vào CSDL / hiển thị theo giờ Việt Nam (UTC+
 Ở trang Tạo gói NC, phần **Tìm Item ID cho các item chưa xác nhận**:
 1. **📥 Tải danh sách item từ NC tool**: tìm với tên trống rồi lật hết các trang kết quả, lưu toàn bộ item của app group vào CSDL. Chỉ cần chạy lại khi tool có item mới. Item nào trong Excel trùng tên hoàn toàn (bỏ qua hoa thường, dấu, `(Khóa)`/`(Bound)`) thì được nhận luôn.
 2. Item còn lại hiện danh sách ứng viên gần giống nhất (có % độ giống). Số lần trong ngoặc (`1 Time` / `11 Times`) phải khớp, và khác Bound thì bị trừ điểm.
+   Cạnh mỗi ứng viên là **số gói trong master đã dùng nó và gói gần nhất**. Gói "gần đây" là 30 gói cuối sheet Item Mapping, vì gói mới được thêm ở cuối sheet; các gói đang setup không được tính.
+   **⭐ Nên dùng**: app chỉ so các item cùng tên, tức chỉ khác chữ thêm ở cuối như `Old`, `Nw`, và phải cùng số lần, cùng Bound. Item có trong nhiều gói gần đây hơn được ⭐; hoà thì xét tổng số gói. Item khác tên thì không bao giờ được ⭐ dù hay dùng (vd `Greater Class Skin Card` khi cần `Greater Class Card`).
+   - Không có item trùng tên hoàn toàn và AI chưa chọn: ô chọn sẵn item ⭐.
+   - Có item trùng tên mà ⭐ rơi vào item khác: app nhắc kiểm tra lại.
+   - Chỉ đếm được dòng item app đã biết Item ID; tỉ lệ này ghi ngay dưới tiêu đề. Bấm 📥 tải danh sách item để đếm đủ hơn.
 3. **🤖 AI chọn giúp**: AI chỉ được chọn trong các ứng viên là item thật trên tool, nên không thể bịa ID. Bạn duyệt rồi bấm **Áp dụng**.
 4. **💾 Lưu vào bảng dùng chung**: lần sau cả team tự nhận các item này.
+
+## Nền tảng plugin (tính năng của thành viên)
+
+Mỗi tính năng của thành viên là một **plugin**: thư mục `plugins/<id>/` có `plugin.toml`. Website tự đưa plugin vào menu.
+- **Quy định chung:** `PLUGIN_GUIDE.md`.
+- **Hướng dẫn cho AI của mọi người:** `AGENTS.md`, `CLAUDE.md`.
+- **Các bước tiếp theo:** `ROADMAP.md`.
+
+Trang **Team → Plugin của team** có:
+- thông báo cho team;
+- danh sách plugin: phiên bản, người phụ trách, số bản ghi, lỗi cần sửa;
+- bộ khởi đầu tải về (code chạy trên máy + plugin mẫu `plugins/_template` + quy định, không có địa chỉ CSDL);
+- ô tự kiểm tra zip (chỉ đọc code, không chạy) và nút gửi plugin cho admin. Bản gửi nằm ở Lịch sử hoạt động, loại *Gửi plugin*.
+
+Cách nền tảng chạy plugin:
+- **Một cửa:** plugin chỉ dùng nền tảng qua `core/sdk.py` (người dùng, quyền, game, lưu dữ liệu, lịch sử, master, Item ID, AI, secret). Các hàm ở đây giữ tương thích ngược để khi dời sang server nội bộ, plugin không phải sửa.
+- **Dữ liệu:** lưu dạng JSON trong bảng `plugin_records` của CSDL chung, theo (plugin, bộ sưu tập, game, khoá). Mỗi lần sửa / xoá, bản cũ được giữ trong `plugin_record_history`.
+- **Mã chung:** `product_key`, `item_id`, `market`, `region`, `date`… (PLUGIN_GUIDE.md mục 5.2). Đây là cơ sở để phase 2 liên kết thông tin giữa các plugin.
+- **Kiểm tra:** `core/plugins.py` đọc code mà không chạy, chặn các vi phạm quy định. Plugin vi phạm không lên menu.
+  - Chạy tay: `tools/check_plugins.py`.
+  - Tự động: GitHub Actions (`.github/workflows/check.yml`) chạy sau mỗi lần đẩy code.
+- **Cô lập lỗi:** plugin lỗi khi chạy chỉ báo lỗi ở trang của nó (`ui/plugin_host.py`), phần còn lại vẫn chạy.
+- **Agent:** `plugins/` không nằm trong bản code của agent, nên cập nhật plugin không làm agent phải tự cập nhật.
+
+Secret của plugin: cài vào secrets của website với tên `PLUGIN_<ID>_<TÊN>`; plugin đọc bằng `sdk.secret("TÊN")`.
 
 ## Nhiều game
 
@@ -166,12 +196,20 @@ Chọn ở ô **🌐 Language** trên cùng thanh bên trái, kể cả ở tran
 
 ## Trạng thái kiểm chứng
 
-- `tests/test_core.py`: logic đọc master, đối chiếu case nạp lỗi, xuất Excel/CSV theo template, plan NC, audit webshop. Chạy trên file mẫu giả lập trong `tests/samples`.
+- `tests/test_core.py`: logic đọc master, đối chiếu case nạp lỗi, xuất Excel/CSV theo template, plan NC, gợi ý item theo lịch sử gói (cả trang Tạo gói NC), audit webshop. Chạy trên file mẫu giả lập trong `tests/samples`.
 - `tests/test_automation_mock.py`: điền form trên **form giả lập** mô phỏng NC tool (Edge headless).
 - `tests/test_team.py`: tài khoản, mật khẩu, phiên đăng nhập, lịch sử, bảng Item ID dùng chung, API đồng bộ (HTTP thật: token sai → 401, Chỉ xem → 403), tách dữ liệu theo game, nâng cấp CSDL/cài đặt/master từ bản cũ.
 - `tests/test_item_lookup_mock.py`: Tra Item lookup trên trang giả lập giống trang thật (app group mặc định là game khác, bảng form nằm trên bảng kết quả).
 - `tests/test_nc_tool_mock.py`: tra Item ID bằng POST (cắt tên 40 ký tự, loại item 83/“Wrong”), tải toàn bộ danh sách item, tạo product + limit trên trang giả lập NC tool.
 - `tests/test_i18n.py`: mọi chữ hiển thị đều có bản dịch tiếng Anh, chỗ `{}` khớp nhau, không dịch trùng lệch.
+- `tests/test_plugins.py`: nền tảng plugin.
+  - Plugin mẫu đạt quy định.
+  - Bắt đủ các vi phạm: khai báo sai, import phần lõi / plugin khác, sqlite, thư viện lạ, `st.set_page_config`, khoá thiếu tiền tố, biến môi trường, bí mật, file lớn, lỗi cú pháp.
+  - Kiểm tra zip, kể cả zip có đường dẫn lạ.
+  - sdk: lưu / đọc / lọc / chuẩn hoá mã chung, lịch sử và khôi phục, tách dữ liệu theo plugin và theo game, bản dịch của plugin.
+  - Trang plugin lỗi không làm hỏng trang; relative import; form của plugin mẫu lưu được.
+  - Menu và trang Plugin của team; bộ khởi đầu không có `data/`.
+  - `test_shared_db.py` chạy thêm phần dữ liệu plugin trên Postgres (ghi 1.200 bản ghi theo lô).
 - `tests/test_jobs.py`: hàng đợi website → agent (chỉ chạy lệnh của đúng người, một máy nhận, hết hạn, huỷ giữa chừng, chuyển file kết quả, lệnh "hiện cửa sổ"); với CSDL chung: website chờ agent và hiện log, nút Hiện cửa sổ agent, và một lượt thật qua Edge ẩn.
 - `tests/test_agent_update.py`: tự cập nhật — chỉ nhận code đúng bản website, chép đè đúng file code (không đụng `data/`, `.venv`, xoá file đã bỏ), từ chối zip có đường dẫn lạ, lệnh bật lại đọc đúng đường dẫn có dấu cách / ngoặc / nháy; với CSDL chung: một lượt thật (agent chạy ngầm từ bản sao app trong thư mục tạm tự tải từ máy chủ HTTP tạm thay GitHub, chép đè, tự bật lại, báo website bản mới).
 - `tests/test_agent_background.py` (CSDL chung, Windows): agent chạy ngầm thật — sẵn sàng, chỉ một bản, chạy lệnh, mở cửa sổ log từ website và từ khay, bật/tắt tự chạy cùng Windows, báo bản mới, `--stop`; luồng `agent.bat` (lần đầu, mở lại khi đang chạy, tự tắt bản cũ khi có code mới); link `…://start` / `…://show` bật agent và hiện cửa sổ (dùng một tên link thử, xoá khi xong).
@@ -201,7 +239,14 @@ core/                  # logic thuần (không phụ thuộc UI)
   i18n.py, locales/    # đa ngôn ngữ: t("chuỗi tiếng Việt") + bản dịch en_*.py
   cowork_import.py     # nhập lịch sử setup từ Claude Cowork (skill package-creation)
   jobs.py              # hàng đợi lệnh website -> agent (CSDL chung)
-  bundle.py            # zip agent tải từ website + mã phiên bản code
+  bundle.py            # zip agent tải từ website + mã phiên bản code + bộ khởi đầu làm plugin
+  plugins.py           # tìm plugin, đọc plugin.toml, kiểm tra theo PLUGIN_GUIDE.md (không chạy code)
+  sdk.py               # cửa duy nhất plugin dùng nền tảng (giữ tương thích ngược)
+plugins/               # plugin của thành viên: plugins/<id>/; _template = plugin mẫu
+ui/plugin_host.py      # đưa plugin vào menu, chạy trang plugin trong khung cô lập lỗi
+views/plugins.py       # trang Plugin của team
+tools/check_plugins.py # kiểm tra plugin (máy, GitHub Actions)
+PLUGIN_GUIDE.md, ROADMAP.md, AGENTS.md, CLAUDE.md  # quy định, lộ trình, hướng dẫn cho AI
 automation/            # Playwright: NC tool + MyTool (chạy tiến trình riêng); agent.py nhận lệnh từ website
   desktop.py           # Windows cho agent chạy ngầm: biểu tượng khay, chạy một bản, tự bật cùng Windows, cửa sổ log
 resources/item_ids.json  # Item ID nạp sẵn lần đầu (l2msa)

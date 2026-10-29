@@ -278,6 +278,53 @@ def rank_tool_items(name: str, items: list[dict], n: int = 8, blocked: dict | No
     return sorted((s for s in scored if s["score"] >= 0.3), key=lambda s: -s["score"])[:n]
 
 
+RECENT_PACKAGES = 30  # "gói gần đây" = 30 gói cuối sheet Item Mapping (gói mới được thêm ở cuối)
+USAGE_MIN_SCORE = 0.8  # gợi ý theo lịch sử gói chỉ xét ứng viên giống tên ít nhất chừng này
+
+
+def item_usage(packages: dict[str, MasterPackage], catalog: ItemCatalog, exclude=()) -> tuple[dict[int, dict], float]:
+    """Item ID -> {'count': số gói dùng, 'recent': số gói trong RECENT_PACKAGES gói cuối, 'last': gói gần nhất dùng nó,
+    'ago': số gói thêm sau gói đó (0 = gói mới nhất)} theo thứ tự dòng Item Mapping, bỏ các gói trong `exclude` (đang setup).
+    Chỉ đếm dòng item đã biết chắc ID (bảng Item ID / trùng tên trên tool); kèm tỉ lệ dòng item đã biết ID."""
+    order = sorted((k for k in packages if k not in exclude), key=lambda k: packages[k].row)
+    ids: dict[str, int | None] = {}
+    usage: dict[int, dict] = {}
+    known = total = 0
+    for pos, k in enumerate(order):
+        ago, found = len(order) - 1 - pos, set()
+        for it in packages[k].items:
+            if it.name not in ids:
+                look = catalog.lookup(it.name)
+                ids[it.name] = look["id"] if look["confirmed"] else None
+            total += 1
+            if ids[it.name]:
+                known += 1
+                found.add(ids[it.name])
+        for item_id in found:
+            u = usage.setdefault(item_id, {"count": 0, "recent": 0})
+            u["count"] += 1
+            u["recent"] += ago < RECENT_PACKAGES
+            u["last"], u["ago"] = k, ago
+    return usage, (known / total if total else 0.0)
+
+
+def same_item_name(excel_name: str, tool_name: str) -> bool:
+    """Cùng tên item, chỉ khác chữ thêm ở cuối (tool có '... (Bound) Old', '... (Bound) Nw'), cùng số lần, cùng Bound.
+    'Greater Class Skin Card' không cùng tên với 'Greater Class Card' (chữ thêm ở giữa)."""
+    a, b = _tokens(excel_name), _tokens(tool_name)
+    n = min(len(a), len(b))
+    return (n > 0 and a[:n] == b[:n] and {x for x in a if x.isdigit()} == {x for x in b if x.isdigit()}
+            and ("bound" in item_key(excel_name).split()) == ("bound" in item_key(tool_name).split()))
+
+
+def suggest_by_usage(name: str, cands: list[dict], usage: dict[int, dict]) -> dict | None:
+    """Ứng viên nên dùng theo lịch sử gói: trong các item cùng tên (same_item_name, giống ≥ USAGE_MIN_SCORE), item có trong
+    nhiều gói gần đây hơn thắng, rồi tới tổng số gói. Chỉ so item cùng tên: item khác tên mà hay dùng (vd 'Greater Class Skin
+    Card' khi cần 'Greater Class Card') không được gợi ý. Không item cùng tên nào từng dùng -> None."""
+    used = [c for c in cands if c["item_id"] in usage and c["score"] >= USAGE_MIN_SCORE and same_item_name(name, c["name"])]
+    return max(used, key=lambda c: (usage[c["item_id"]]["recent"], usage[c["item_id"]]["count"], c["score"]), default=None)
+
+
 PICK_SCHEMA = {
     "type": "object",
     "properties": {

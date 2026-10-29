@@ -65,3 +65,36 @@ def agent_zip(username: str, database_url: str, root: Path = config.APP_ROOT, si
             f"Agent nay chay lenh cua tai khoan '{username}'. Khong gui thu muc nay cho nguoi khac\r\n"
             "(co san dia chi CSDL chung va tai khoan cua ban).\r\n"))
     return buf.getvalue()
+
+
+STARTER_DOCS = ("PLUGIN_GUIDE.md", "ROADMAP.md", "AGENTS.md", "CLAUDE.md")
+STARTER_README = """Bộ khởi đầu làm plugin cho L2M Ops
+
+Bộ này có code nền tảng (chạy được trên máy bạn, dữ liệu lưu trên máy — không có địa chỉ CSDL chung),
+plugin mẫu (plugins/_template) và quy định (PLUGIN_GUIDE.md).
+
+1. Giải nén vào một thư mục riêng.
+2. Chép plugins\\_template thành plugins\\<id> (vd plugins\\update_tracker), sửa id trong plugin.toml cho trùng tên thư mục.
+3. Đưa AI của bạn (Claude, ChatGPT, Cursor…) đọc AGENTS.md và PLUGIN_GUIDE.md trước khi nhờ nó viết code.
+   Claude Code / Cursor mở thư mục này là tự đọc AGENTS.md / CLAUDE.md.
+4. Nháy đúp run.bat: website chạy trên máy bạn (lần đầu tự cài Python + thư viện), plugin hiện ở menu bên trái.
+5. Kiểm tra: .venv\\Scripts\\python.exe tools\\check_plugins.py plugins\\<id>   — phải báo OK.
+6. Đưa lên: xem PLUGIN_GUIDE.md mục 10 (GitHub, hoặc gửi zip ở trang "Plugin của team" trên website).
+"""
+
+
+def starter_zip(root: Path = config.APP_ROOT) -> bytes:
+    """Bộ khởi đầu cho thành viên làm plugin: code nền tảng (không có data/ — không có địa chỉ CSDL), plugin mẫu, quy định."""
+    files = code_files(root) + [root / f for f in STARTER_DOCS if (root / f).is_file()]
+    plug = root / "plugins"
+    if (plug / "__init__.py").is_file():
+        files.append(plug / "__init__.py")
+    if (plug / "_template").is_dir():
+        files += [p for p in sorted((plug / "_template").rglob("*"))
+                  if p.is_file() and "__pycache__" not in p.parts and p.suffix not in SKIP_SUFFIXES]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in files:
+            z.write(p, p.relative_to(root).as_posix())
+        z.writestr("BAT-DAU-LAM-PLUGIN.txt", ("﻿" + STARTER_README).replace("\n", "\r\n").encode("utf-8"))
+    return buf.getvalue()

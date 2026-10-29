@@ -84,6 +84,24 @@ EN = {
     "— chưa chọn —": "— not picked —",
     "{item_id} — {name}  ·  giống {score:.0%}": "{item_id} — {name}  ·  {score:.0%} similar",
     "  ·  🤖 AI chọn": "  ·  🤖 AI pick",
+    "Cạnh mỗi item là số gói trong master đã dùng nó và gói gần nhất (gói mới thêm ở cuối sheet Item Mapping). "
+    "⭐ = nên dùng: trong các item cùng tên, item có trong nhiều gói gần đây nhất. "
+    "Chỉ đếm được dòng item app đã biết Item ID ({pct:.0%} dòng trong master) — tải danh sách item từ NC tool để đếm đủ hơn.":
+        "Next to each item: how many packages in the master used it and the latest one (new packages are added at the bottom of "
+        "the Item Mapping sheet). ⭐ = recommended: among items with the same name, the one in the most recent packages. "
+        "Only item rows whose Item ID the app knows are counted ({pct:.0%} of rows in the master) — download the item list "
+        "from NC tool to count more.",
+    "{n} gói, gần nhất {key}": "{n} packages, latest {key}",
+    "chưa gói nào dùng": "not used in any package",
+    "⭐ Nên dùng **{item_id}**: có trong {n} gói của master ({recent} gói trong {window} gói gần nhất). "
+    "Gói gần nhất dùng nó: {key} — {package}":
+        "⭐ Recommended: **{item_id}** — in {n} packages of the master ({recent} of the latest {window}). "
+        "Latest package using it: {key} — {package}",
+    " (gói mới nhất).": " (the newest package).",
+    " ({n} gói trước).": " ({n} packages ago).",
+    " Cùng tên nhưng chưa gói nào dùng: {ids}.": " Same name but not used in any package: {ids}.",
+    " ⚠ Khác item trùng tên **{item_id}** — kiểm tra kỹ trước khi chọn.":
+        " ⚠ Differs from the item with the exact same name (**{item_id}**) — check carefully before picking.",
     " · đã tra theo “{query}”": " · looked up as “{query}”",
     "Chưa có ứng viên. Tải danh sách item hoặc tra riêng trên NC tool; vẫn không ra thì nhập Item ID tay ở bảng item phía trên.":
         "No candidates yet. Download the item list or look it up on NC tool; if still nothing, enter the Item ID manually in the item table above.",

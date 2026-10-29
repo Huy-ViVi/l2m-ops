@@ -27,6 +27,8 @@ KINDS = {
     "nc_setup": "Tạo gói NC",
     "webshop_audit": "Kiểm tra webshop",
     "master": "Cập nhật master",
+    "plugin": "Plugin",
+    "plugin_submit": "Gửi plugin",
 }
 STATUSES = {"draft": "Nháp", "done": "Hoàn thành", "need_check": "Cần kiểm tra", "cancelled": "Huỷ"}
 
@@ -74,6 +76,15 @@ CREATE TABLE IF NOT EXISTS job_files (
 CREATE TABLE IF NOT EXISTS agents (
     username TEXT PRIMARY KEY, host TEXT, seen_at TEXT, version TEXT, checks TEXT
 );
+CREATE TABLE IF NOT EXISTS plugin_records (
+    plugin TEXT NOT NULL, collection TEXT NOT NULL, game TEXT NOT NULL DEFAULT '', rkey TEXT NOT NULL,
+    data TEXT NOT NULL, updated_by TEXT, updated_at TEXT, PRIMARY KEY (plugin, collection, game, rkey)
+);
+CREATE TABLE IF NOT EXISTS plugin_record_history (
+    id INTEGER PRIMARY KEY, plugin TEXT NOT NULL, collection TEXT NOT NULL, game TEXT NOT NULL DEFAULT '', rkey TEXT NOT NULL,
+    action TEXT NOT NULL, data TEXT, changed_by TEXT, changed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS plugin_record_history_key ON plugin_record_history (plugin, collection, game, rkey);
 """
 SESSION_DAYS = 14
 
@@ -639,3 +650,79 @@ def _master_content(_where: str, master_id: int) -> bytes | None:
     with connect() as c:
         row = c.execute("SELECT content FROM master_files WHERE id = ?", (master_id,)).fetchone()
     return bytes(row["content"]) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Dữ liệu của plugin (plugin dùng qua core.sdk): bản ghi JSON theo (plugin, bộ sưu tập, game, khoá).
+# Mỗi lần sửa / xoá, bản cũ được giữ trong plugin_record_history để xem lại và khôi phục.
+# ---------------------------------------------------------------------------
+_IN_CHUNK = 500  # số khoá mỗi câu IN (...)
+
+
+def plugin_save(plugin: str, collection: str, game: str, rows: dict[str, str], by: str) -> int:
+    """rows: khoá -> dữ liệu JSON. Chỉ ghi bản ghi mới hoặc có thay đổi; trả về số bản ghi đã ghi."""
+    init()
+    ts = now()
+    keys = list(rows)
+    with connect() as c:
+        old: dict[str, str] = {}
+        for i in range(0, len(keys), _IN_CHUNK):
+            chunk = keys[i:i + _IN_CHUNK]
+            old.update({r["rkey"]: r["data"] for r in c.execute(
+                f"SELECT rkey, data FROM plugin_records WHERE plugin = ? AND collection = ? AND game = ? "
+                f"AND rkey IN ({','.join('?' * len(chunk))})", (plugin, collection, game, *chunk))})
+        changed = [k for k in keys if old.get(k) != rows[k]]
+        c.executemany("INSERT INTO plugin_record_history(plugin, collection, game, rkey, action, data, changed_by, changed_at) "
+                      "VALUES (?,?,?,?,?,?,?,?)",
+                      [(plugin, collection, game, k, "update", old[k], by, ts) for k in changed if k in old])
+        c.executemany("INSERT INTO plugin_records(plugin, collection, game, rkey, data, updated_by, updated_at) VALUES (?,?,?,?,?,?,?) "
+                      "ON CONFLICT(plugin, collection, game, rkey) DO UPDATE SET data = excluded.data, "
+                      "updated_by = excluded.updated_by, updated_at = excluded.updated_at",
+                      [(plugin, collection, game, k, rows[k], by, ts) for k in changed])
+    return len(changed)
+
+
+@_cached
+def plugin_load(plugin: str, collection: str, game: str) -> list[dict]:
+    init()
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT rkey, data, updated_by, updated_at FROM plugin_records WHERE plugin = ? AND collection = ? AND game = ? "
+            "ORDER BY updated_at DESC, rkey", (plugin, collection, game))]
+
+
+def plugin_delete(plugin: str, collection: str, game: str, keys: list[str], by: str) -> int:
+    init()
+    ts = now()
+    gone = 0
+    with connect() as c:
+        for i in range(0, len(keys), _IN_CHUNK):
+            chunk = keys[i:i + _IN_CHUNK]
+            where = f"plugin = ? AND collection = ? AND game = ? AND rkey IN ({','.join('?' * len(chunk))})"
+            args = (plugin, collection, game, *chunk)
+            old = [dict(r) for r in c.execute(f"SELECT rkey, data FROM plugin_records WHERE {where}", args)]
+            c.executemany("INSERT INTO plugin_record_history(plugin, collection, game, rkey, action, data, changed_by, changed_at) "
+                          "VALUES (?,?,?,?,?,?,?,?)", [(plugin, collection, game, r["rkey"], "delete", r["data"], by, ts) for r in old])
+            c.execute(f"DELETE FROM plugin_records WHERE {where}", args)
+            gone += len(old)
+    return gone
+
+
+@_cached
+def plugin_history(plugin: str, collection: str, game: str, key: str, limit: int = 50) -> list[dict]:
+    init()
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, action, data, changed_by, changed_at FROM plugin_record_history "
+            "WHERE plugin = ? AND collection = ? AND game = ? AND rkey = ? ORDER BY id DESC LIMIT ?",
+            (plugin, collection, game, key, limit))]
+
+
+@_cached
+def plugin_stats() -> list[dict]:
+    """Số bản ghi theo plugin / bộ sưu tập / game (trang Plugin của team; phase 2 dùng để rà dữ liệu cần liên kết)."""
+    init()
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT plugin, collection, game, COUNT(*) AS n, MAX(updated_at) AS updated_at FROM plugin_records "
+            "GROUP BY plugin, collection, game ORDER BY plugin, collection, game")]

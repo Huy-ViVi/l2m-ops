@@ -49,6 +49,12 @@ def _reset_item_editors(plans: dict) -> None:
         st.session_state.pop(K(f"nc_items_{k}"), None)
 
 
+def _reset_pickers(names) -> None:
+    """Ô chọn item nhận lại lựa chọn mặc định — sau khi ứng viên đổi (tra / tải danh sách) hoặc AI vừa gợi ý."""
+    for name in names:
+        st.session_state.pop(K(f"lk_{name}"), None)
+
+
 # ---- 1. Chọn gói -------------------------------------------------------------
 st.subheader(t("1. Chọn gói cần setup"))
 options = list(master.packages)
@@ -154,11 +160,18 @@ pending_names = list(dict.fromkeys(it["excel_name"] for _, it in pending))
 group_label = g["nc_app_group_label"] or app_group
 tool_list = store.tool_items(gid)
 n_tool, tool_updated = store.tool_items_info(gid)
+# Item nào đã nằm trong bao nhiêu gói trước đó (master hiện tại, trừ các gói đang setup) -> gợi ý ⭐ ở ô chọn item.
+usage, known_share = nc.item_usage(master.packages, catalog, exclude=plans) if pending_names else ({}, 0.0)
 
 st.markdown(t("**Tìm Item ID cho các item chưa xác nhận**"))
 st.caption(t("Danh sách item {group} đã tải từ NC tool: **{n}** item", group=group_label, n=n_tool)
            + (t(" (cập nhật {at})", at=tool_updated) if tool_updated else t(" — chưa tải")) + ". "
            + t("Tên trong Excel hay khác tên trên tool, nên app so khớp gần đúng với danh sách này; AI chỉ chọn trong các item thật đó."))
+if pending_names:
+    st.caption(t("Cạnh mỗi item là số gói trong master đã dùng nó và gói gần nhất (gói mới thêm ở cuối sheet Item Mapping). "
+                 "⭐ = nên dùng: trong các item cùng tên, item có trong nhiều gói gần đây nhất. "
+                 "Chỉ đếm được dòng item app đã biết Item ID ({pct:.0%} dòng trong master) — tải danh sách item từ NC tool để đếm đủ hơn.",
+                 pct=known_share))
 c1, c2, c3 = st.columns(3)
 if c1.button(t("📥 Tải danh sách item từ NC tool ({group})", group=group_label), disabled=not auth.automation_allowed() or not nc_ok,
              help=t("Tìm với tên trống rồi lật hết các trang kết quả. Chạy lại khi tool có item mới.")):
@@ -174,6 +187,7 @@ if c1.button(t("📥 Tải danh sách item từ NC tool ({group})", group=group_
                     it.update(item_id=look["id"], item_name=look["canonical"], match=look["how"], confirmed=True)
                     auto_matched += 1
         _reset_item_editors(plans)
+        _reset_pickers(pending_names)
         common.flash(t("Đã lưu {n} item của {group}. Tự khớp được {matched} item trùng tên.", n=n, group=group_label, matched=auto_matched))
         st.rerun()
 if c2.button(t("🔎 Tra riêng {n} item trên NC tool", n=len(pending_names)),
@@ -183,6 +197,7 @@ if c2.button(t("🔎 Tra riêng {n} item trên NC tool", n=len(pending_names)),
         st.session_state[K("nc_lookup")] = res["results"]
         found = [c for r in res["results"].values() for c in nc.lookup_candidates(r.get("rows", []))]
         store.save_tool_items(gid, found)  # kết quả tra được cũng thành dữ liệu so khớp cho lần sau
+        _reset_pickers(pending_names)
 if not auth.automation_allowed():
     st.caption("ℹ️ " + common.automation_reason())
 
@@ -206,19 +221,41 @@ if c3.button(t("🤖 AI chọn giúp ({n} item có ứng viên)", n=sum(1 for v 
             with st.spinner(t("Đang hỏi {ai}...", ai=ai.label)):
                 picks = nc.ai_pick_items(ai, {n: c for n, c in candidates.items() if c}, g["name"])
             st.session_state[K("nc_ai_picks")] = picks
-            for name in candidates:
-                st.session_state.pop(K(f"lk_{name}"), None)  # để ô chọn nhận gợi ý mới của AI
+            _reset_pickers(candidates)
         except AIError as e:
             st.error(str(e))
 ai_picks = st.session_state.get(K("nc_ai_picks"), {})
 
 
-def _candidate_label(i: int, cands: list[dict], ai_pick: dict | None) -> str:
-    if i == 0:
+def _usage_text(item_id: int) -> str:
+    u = usage.get(item_id)
+    return t("{n} gói, gần nhất {key}", n=u["count"], key=u["last"]) if u else t("chưa gói nào dùng")
+
+
+def _candidate_label(item_id: int, by_id: dict[int, dict], ai_pick: dict | None, suggested: dict | None) -> str:
+    if not item_id:
         return t("— chưa chọn —")
-    c = cands[i - 1]
-    return (t("{item_id} — {name}  ·  giống {score:.0%}", item_id=c["item_id"], name=c["name"], score=c["score"])
-            + (t("  ·  🤖 AI chọn") if ai_pick and ai_pick["item_id"] == c["item_id"] else ""))
+    c = by_id[item_id]
+    return (("⭐ " if suggested and suggested["item_id"] == item_id else "")  # đầu dòng: ô hẹp cắt mất phần cuối
+            + t("{item_id} — {name}  ·  giống {score:.0%}", item_id=item_id, name=c["name"], score=c["score"])
+            + "  ·  " + _usage_text(item_id)
+            + (t("  ·  🤖 AI chọn") if ai_pick and ai_pick["item_id"] == item_id else ""))
+
+
+def _usage_note(name: str, cands: list[dict], suggested: dict, exact: int) -> str:
+    """Vì sao ⭐: gói nào đã dùng item đó; item cùng tên nào chưa gói nào dùng; ⭐ khác item trùng tên thì nhắc kiểm tra."""
+    u = usage[suggested["item_id"]]
+    note = t("⭐ Nên dùng **{item_id}**: có trong {n} gói của master ({recent} gói trong {window} gói gần nhất). "
+             "Gói gần nhất dùng nó: {key} — {package}", item_id=suggested["item_id"], n=u["count"], recent=u["recent"],
+             window=nc.RECENT_PACKAGES, key=u["last"], package=master.packages[u["last"]].name)
+    note += t(" (gói mới nhất).") if u["ago"] == 0 else t(" ({n} gói trước).", n=u["ago"])
+    unused = [str(c["item_id"]) for c in cands if c["item_id"] not in usage and c["score"] >= nc.USAGE_MIN_SCORE
+              and nc.same_item_name(name, c["name"])]
+    if unused:
+        note += t(" Cùng tên nhưng chưa gói nào dùng: {ids}.", ids=", ".join(unused))
+    if exact and exact != suggested["item_id"]:
+        note += t(" ⚠ Khác item trùng tên **{item_id}** — kiểm tra kỹ trước khi chọn.", item_id=exact)
+    return note
 
 
 choices = {}
@@ -230,16 +267,23 @@ for name in pending_names:
         if not cands:
             st.caption(t("Chưa có ứng viên. Tải danh sách item hoặc tra riêng trên NC tool; vẫn không ra thì nhập Item ID tay ở bảng item phía trên."))
             continue
+        by_id = {c["item_id"]: c for c in cands}
         ai_pick = ai_picks.get(name)
-        exact = next((i for i, c in enumerate(cands, 1) if nc.item_key(c["name"]) == nc.item_key(name)), 0)
-        by_ai = next((i for i, c in enumerate(cands, 1) if ai_pick and c["item_id"] == ai_pick["item_id"]), 0)
-        default = exact or by_ai or (1 if cands[0]["score"] >= 0.9 else 0)
-        pick = st.selectbox(t("Item trên tool"), list(range(len(cands) + 1)), index=default, key=K(f"lk_{name}"),
-                            format_func=lambda i, c=cands, a=ai_pick: _candidate_label(i, c, a))
+        exact = next((c["item_id"] for c in cands if nc.item_key(c["name"]) == nc.item_key(name)), 0)
+        by_ai = ai_pick["item_id"] if ai_pick and ai_pick["item_id"] in by_id else 0
+        suggested = nc.suggest_by_usage(name, cands, usage)
+        default = (exact or by_ai or (suggested or {}).get("item_id")
+                   or (cands[0]["item_id"] if cands[0]["score"] >= 0.9 else 0))
+        # Giá trị là Item ID chứ không phải vị trí: danh sách ứng viên đổi thứ tự thì lựa chọn cũ vẫn trỏ đúng item.
+        options = [0, *by_id]
+        pick = st.selectbox(t("Item trên tool"), options, index=options.index(default), key=K(f"lk_{name}"),
+                            format_func=lambda i, c=by_id, a=ai_pick, s=suggested: _candidate_label(i, c, a, s))
+        if suggested:
+            st.caption(_usage_note(name, cands, suggested, exact))
         if ai_pick:
             st.caption(f"🤖 AI ({ai_pick['confidence']}): {ai_pick['reason']}")
         if pick:
-            choices[name] = cands[pick - 1]
+            choices[name] = by_id[pick]
 if choices and st.button(t("✅ Áp dụng {n} Item ID đã chọn", n=len(choices)), type="primary"):
     for p in plans.values():
         for it in p["items"]:

@@ -127,6 +127,56 @@ def test_nc_plan():
     assert nc.parse_limit("weird").get("error")
 
 
+def test_item_usage_suggestion():
+    """Gợi ý item theo lịch sử gói: đếm gói đã dùng từng Item ID (thứ tự dòng Item Mapping), chỉ so giữa các item cùng tên."""
+    from core.master import MasterPackage, PackageItem
+
+    known = {"greater class card 11 times bound": 10, "greater class skin card 11 times bound": 186,
+             "fancy class card 11 times bound old": 79, "diamonds": 2}
+
+    class Catalog:
+        def lookup(self, name):
+            item_id = known.get(nc.item_key(name))
+            return {"id": item_id, "confirmed": item_id is not None}
+
+    def pkg(key, row, *names):
+        return MasterPackage(key, key, f"Package {key}", row=row, items=[PackageItem(n, 1) for n in names])
+
+    packages = {p.product_key: p for p in [
+        pkg("web.item1", 10, "Greater Class Card (11 Times) (Bound)", "Diamonds"),
+        pkg("web.item2", 20, "Greater Class Card (11 Times) (Khóa)", "Greater Class Card (11 Times) (Bound)"),  # 1 gói dù 2 dòng
+        *[pkg(f"web.item{i}", 20 + i, "Diamonds") for i in range(3, 40)],
+        pkg("web.item40", 100, "Greater Class Skin Card (11 Times) (Bound)", "Mystery Box"),
+        pkg("web.item41", 101, "Fancy Class Card (11 Times) (Bound) Old"),
+        pkg("web.item42", 102, "Greater Class Card (11 Times) (Bound)"),  # gói đang setup -> không tính
+    ]}
+    usage, share = nc.item_usage(packages, Catalog(), exclude={"web.item42"})
+    assert usage[10] == {"count": 2, "recent": 0, "last": "web.item2", "ago": 39}, usage[10]
+    assert usage[186] == {"count": 1, "recent": 1, "last": "web.item40", "ago": 1}
+    assert usage[79]["ago"] == 0 and usage[2]["count"] == 38
+    assert share == 43 / 44  # chỉ 'Mystery Box' chưa biết ID
+
+    tool = [{"item_id": 10, "name": "Greater Class Card (11 Times) (Bound)"},
+            {"item_id": 109, "name": "Greater Class Card (11 Times) (Bound) Nw"},
+            {"item_id": 127, "name": "Greater Class Card (11 Times) (Event)"},
+            {"item_id": 186, "name": "Greater Class Skin Card (11 Times) (Bound)"},
+            {"item_id": 79, "name": "Fancy Class Card (11 Times) (Bound) Old"},
+            {"item_id": 200, "name": "Fancy Class Card (11 Times) (Bound)"}]
+    greater = nc.rank_tool_items("Greater Class Card (11 Times) (Khóa)", tool)
+    # 186 có trong gói gần đây hơn nhưng là item khác tên (Skin) -> vẫn gợi ý 10
+    assert nc.suggest_by_usage("Greater Class Card (11 Times) (Khóa)", greater, usage)["item_id"] == 10
+    fancy = nc.rank_tool_items("Fancy Class Card (11 Times) (Khóa)", tool)
+    assert fancy[0]["item_id"] == 200  # trùng tên nhưng chưa gói nào dùng; bản 'Old' có trong gói mới nhất
+    assert nc.suggest_by_usage("Fancy Class Card (11 Times) (Khóa)", fancy, usage)["item_id"] == 79
+    assert nc.suggest_by_usage("Greater Class Card (11 Times) (Khóa)", greater, {}) is None
+
+    same = nc.same_item_name
+    assert same("Greater Class Card (11 Times) (Khóa)", "Greater Class Card (11 Times) (Bound) Nw")
+    assert not same("Greater Class Card (11 Times) (Khóa)", "Greater Class Skin Card (11 Times) (Bound)")
+    assert not same("Greater Class Card (11 Times) (Khóa)", "Greater Class Card (11 Times) (Event)")  # khác Bound
+    assert not same("Greater Class Card (1 Time) (Khóa)", "Greater Class Card (11 Times) (Bound)")
+
+
 def test_webshop_audit():
     expected, warns = wa.expected_rows(MASTER, ["web.item153", "web.sa.key5"])
     assert len(expected) == 11 and not warns
@@ -171,6 +221,45 @@ def test_master_real_quirks():
     plan = nc.build_plan(last, nc.ItemCatalog())
     assert not any("Purchase Limit" in i for i in nc.validate_plan(plan))
     assert nc.ItemCatalog().lookup("Relic of Blessings (Khóa)")["id"] == 25
+
+
+def test_nc_page_usage_hint():
+    """Trang Tạo gói NC: ô chọn item ghi số gói đã dùng từng ứng viên, ⭐ item cùng tên có trong gói trước đó và chọn sẵn nó;
+    danh sách ứng viên đổi thứ tự thì lựa chọn đã chọn vẫn trỏ đúng item."""
+    import json
+    import shutil
+
+    from streamlit.testing.v1 import AppTest
+
+    from core import config, store
+
+    os.environ.update(L2M_APP_MODE="local", L2M_NO_AUTOMATION="1")
+    d = config.master_dir("l2m")
+    d.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(S / "SAMPLE All Product Information.xlsx", d / "current.xlsx")
+    (d / "current.json").write_text(json.dumps({"name": "SAMPLE", "uploaded_at": "now"}), encoding="utf-8")
+    # Giả lập: gói web.item5 đã dùng item 5003 (dòng 'Greater Class Card (1 Time) (Bound)' được ghi nhận là 5003).
+    store.upsert_item(5003, "Unknown Shiny Stone Old", ["Greater Class Card (1 Time) (Bound)"], by="test")
+    store.save_tool_items("l2m", [{"item_id": 5001, "name": "Unknown Shiny Stone New"},
+                                  {"item_id": 5003, "name": "Unknown Shiny Stone Old"}])
+    at = AppTest.from_file(str(ROOT / "views" / "nc_setup.py"), default_timeout=120)
+    at.run()
+    at.text_area(key="nc_paste_l2m").set_value("web.item160").run()
+    assert not at.exception, at.exception
+    box = next(s for s in at.selectbox if s.label == "Item trên tool")
+    assert box.value == 5003, box.options  # không có item trùng tên, không có AI -> chọn sẵn item ⭐
+    star = next(o for o in box.options if "5003" in o)
+    assert star.startswith("⭐ 5003") and "1 gói, gần nhất web.item5" in star, star
+    assert "chưa gói nào dùng" in next(o for o in box.options if o.startswith("5001"))
+    note = " ".join(c.value for c in at.caption)
+    assert "⭐ Nên dùng **5003**" in note and "Weekly Top-up Class box (2 gói trước)" in note, note
+    assert "chưa gói nào dùng: 5001" in note, note
+
+    box.set_value(5001).run()
+    store.save_tool_items("l2m", [{"item_id": 5000, "name": "Unknown Shiny Stone"}])  # ứng viên mới đứng đầu danh sách
+    at.run()
+    box = next(s for s in at.selectbox if s.label == "Item trên tool")
+    assert box.options[1].startswith("5000") and box.value == 5001, (box.options, box.value)
 
 
 def test_netcheck():

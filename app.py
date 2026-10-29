@@ -9,7 +9,7 @@ import streamlit as st
 
 from core import api_server, config, db, store
 from core.i18n import t
-from ui import agent_setup, auth, common
+from ui import agent_setup, auth, common, plugin_host
 
 st.set_page_config(page_title="L2M Ops Toolkit", page_icon="🛠️", layout="wide")
 config.ensure_dirs()
@@ -43,9 +43,11 @@ pages = {
         st.Page("views/payment_errors.py", title=t("Case nạp lỗi"), icon=":material/report:"),
         st.Page("views/webshop_audit.py", title=t("Kiểm tra webshop VNG"), icon=":material/fact_check:"),
     ],
+    **plugin_host.sections(),  # tính năng của thành viên (plugins/<id>/) — xem PLUGIN_GUIDE.md
     "Team": [
         st.Page("views/history.py", title=t("Lịch sử hoạt động"), icon=":material/history:"),
         st.Page("views/shared_data.py", title=t("Dữ liệu dùng chung"), icon=":material/database:"),
+        st.Page("views/plugins.py", title=t("Plugin của team"), icon=":material/extension:"),
     ],
 }
 system = []
