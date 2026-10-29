@@ -35,10 +35,10 @@ EN = {
         "The agent runs in the background on {host}. Click to open its log window on that machine "
         "(closing the log window does not stop the agent).",
     "Đã gửi — cửa sổ agent sẽ hiện trên máy {host} sau vài giây.": "Sent — the agent window will appear on {host} in a few seconds.",
-    "Trình duyệt đã bị đóng trước khi thao tác xong. Chạy lại và giữ cửa sổ Edge mở tới khi log báo xong "
-    "(nếu cửa sổ bật lên trên máy người khác: bạn đang dùng tài khoản của họ).":
-        "The browser was closed before the action finished. Run it again and keep the Edge window open until the log says done "
-        "(if the window popped up on someone else's machine, you are using their account).",
+    "Trình duyệt đã bị đóng trước khi thao tác xong. Chạy lại và giữ cửa sổ trình duyệt mở tới khi log báo "
+    "xong (nếu cửa sổ bật lên trên máy người khác: bạn đang dùng tài khoản của họ).":
+        "The browser was closed before the action finished. Run it again and keep the browser window open until the log says "
+        "done (if the window popped up on someone else's machine, you are using their account).",
     "Chưa thấy agent trên máy bạn.": "No agent found on your machine.",
     "Chạy trên máy **{host}** (agent của {user}) — giữ trang này mở tới khi xong.":
         "Running on **{host}** ({user}'s agent) — keep this page open until it finishes.",

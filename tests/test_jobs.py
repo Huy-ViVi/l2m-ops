@@ -144,7 +144,7 @@ def test_heartbeat_opens_window_on_request():
         # agent tự kiểm tra máy rồi báo lên; "Kiểm tra lại" trên website -> kiểm tra lại ngay (mốc giờ mới)
         assert _wait(lambda: "at" in jobs.agent_status("alice", fresh=True)["checks"], 20), jobs.agent_status("alice", fresh=True)
         checks = jobs.agent_status("alice", fresh=True)["checks"]
-        assert {"nc_tool", "mytool", "edge", "autostart", "protocol"} <= set(checks), checks
+        assert {"nc_tool", "mytool", "browser", "browser_ok", "edge", "autostart", "protocol"} <= set(checks), checks
         time.sleep(1.1)
         jobs.request_check("alice")
         assert _wait(lambda: jobs.agent_status("alice", fresh=True)["checks"]["at"] != checks["at"], 20), "không kiểm tra lại"
@@ -286,32 +286,47 @@ def test_website_check_machine_ready():
     jobs.agent_offline("ready1")
 
 
+def _dialog_title(at) -> str:
+    return at.get("dialog")[0].proto.dialog.title
+
+
 def test_website_check_machine_needs_vpn():
-    """Agent chạy nhưng không vào được NC tool -> hộp hướng dẫn bật VPN. Hộp không mất khi cả trang chạy lại; "Kiểm tra lại"
-    gửi lệnh cho agent ngay lúc bấm và ghi rõ agent đã kiểm tra lúc nào, kể cả khi máy vẫn còn thiếu."""
+    """Agent chạy nhưng không vào được NC tool -> hộp hướng dẫn bật VPN. Hộp không mất khi cả trang chạy lại; bấm "Kiểm tra
+    lại" thì dòng chờ hiện ngay, lệnh tới agent, agent trả lời thì hộp ghi rõ lúc kiểm tra (kể cả khi máy vẫn còn thiếu);
+    agent tự thấy NC tool (vừa bật VPN) thì hộp tự chuyển sang đủ điều kiện, cả tiêu đề, không cần bấm."""
     from core import bundle
+    from ui import agent_setup
 
     _website_env()
     jobs.heartbeat("vpn1", "pc-vpn", bundle.code_version(), {**GOOD, "nc_tool": False})
     at = _after_login("vpn1")
     assert at.get("dialog"), "không mở hộp hướng dẫn"
     assert "Chưa vào được NC tool" in _texts(at) and "Bật VPN công ty trên máy pc-vpn" in _texts(at), _texts(at)
-    assert "lần cuối lúc 09:00:00" in _texts(at), _texts(at)
+    assert "tự thử lại mỗi 10 giây" in _texts(at) and _dialog_title(at) == "Máy pc-vpn cần thêm vài bước"
     at.run()  # cả trang chạy lại (vd bật VPN làm mất kết nối rồi nối lại): hộp vẫn mở
     assert at.get("dialog") and "Chưa vào được NC tool" in _texts(at)
 
-    def agent_answers(checks: dict) -> None:  # agent nhận lệnh kiểm tra lại, vài giây sau báo kết quả mới
-        threading.Timer(4, jobs.heartbeat, ("vpn1", "pc-vpn", bundle.code_version(), checks)).start()
-
-    agent_answers({**GOOD, "nc_tool": False, "at": "2026-10-28 09:03:00"})  # VPN vẫn chưa vào được
     at.button(key="fix_recheck").click().run()
     assert not at.exception, at.exception
+    assert "Đã gửi yêu cầu kiểm tra lúc" in _texts(at), _texts(at)  # dòng chờ hiện ngay ở lượt bấm
+    assert at.button(key="fix_recheck").disabled
     assert jobs.CHECK_MACHINE in jobs.claim_controls("vpn1", "pc-vpn")  # website nhờ agent kiểm tra lại ngay
+    jobs.heartbeat("vpn1", "pc-vpn", bundle.code_version(), {**GOOD, "nc_tool": False, "at": "2026-10-28 09:03:00"})
+    at.run()  # _watch (2 giây/lần) thấy agent trả lời: VPN vẫn chưa vào được
     assert "Agent vừa kiểm tra lại máy pc-vpn lúc 09:03:00" in _texts(at), _texts(at)
+    assert "Đã gửi yêu cầu" not in _texts(at) and not at.button(key="fix_recheck").disabled
     assert at.get("dialog") and "Chưa vào được NC tool" in _texts(at)
-    agent_answers({**GOOD, "at": "2026-10-28 09:05:00"})  # người dùng đã bật VPN
-    at.button(key="fix_recheck").click().run()
-    assert "đủ điều kiện" in _texts(at), _texts(at)
+
+    at.button(key="fix_recheck").click().run()  # agent không trả lời -> quá giờ chờ thì báo
+    pending = at.session_state[agent_setup.PENDING]
+    at.session_state[agent_setup.PENDING] = {**pending, "until": 0}
+    at.run()
+    assert "chưa trả lời sau 20 giây" in _texts(at), _texts(at)
+
+    jobs.heartbeat("vpn1", "pc-vpn", bundle.code_version(), {**GOOD, "at": "2026-10-28 09:05:00"})  # agent tự thấy NC tool
+    at.run()  # không bấm gì: _watch thấy máy đổi trạng thái -> vẽ lại hộp
+    assert "đủ điều kiện" in _texts(at) and "Microsoft Edge" in _texts(at), _texts(at)
+    assert _dialog_title(at) == "Máy pc-vpn đã đủ điều kiện"
     at.button(key="fix_close").click().run()
     assert not at.get("dialog")
     at.run()
@@ -341,11 +356,43 @@ def test_website_check_machine_new_user():
     assert [b.proto.label for b in at.get("download_button")].count("⬇ Tải agent cho máy này") == 2  # thanh bên + hộp hướng dẫn
     assert any(f"{jobs.PROTOCOL}://start" in h.proto.body for h in at.get("html")), "thiếu nút bật agent"
     assert "Cài một lần" in _texts(at)
-    threading.Timer(3, jobs.heartbeat, ("new1", "pc-new", bundle.code_version(), GOOD)).start()  # agent.bat vừa chạy xong
     at.button(key="setup_recheck").click().run()
     assert not at.exception, at.exception
+    assert "Đã gửi yêu cầu kiểm tra lúc" in _texts(at), _texts(at)
+    jobs.heartbeat("new1", "pc-new", bundle.code_version(), GOOD)  # agent.bat vừa chạy xong
+    at.run()
     assert "Đã thấy agent trên máy **pc-new**" in _texts(at), _texts(at)
     jobs.agent_offline("new1")
+
+
+def test_website_own_browser():
+    """Mỗi người tự chọn trình duyệt ở thanh bên: lưu theo tài khoản, agent kiểm tra lại máy với trình duyệt đó; máy chưa
+    có thì hộp hướng dẫn chỉ đúng trình duyệt + link tải. Lệnh gửi agent mang theo lựa chọn này."""
+    from core import bundle
+
+    _website_env()
+    assert config.browser_channel(config.load_settings()) == "msedge"
+    jobs.heartbeat("br1", "pc-br", bundle.code_version(), {**GOOD, "browser": "msedge", "browser_ok": True})
+    at = _after_login("br1")
+    assert not at.get("dialog")
+    box = at.selectbox(key="own_browser")
+    assert box.value == "" and "Theo team (Microsoft Edge)" in box.options, box.options
+    box.set_value("chrome").run()
+    assert not at.exception, at.exception
+    assert store.user_browser("br1") == "chrome" and at.session_state["auth_user"]["browser"] == "chrome"
+    assert jobs.CHECK_MACHINE in jobs.claim_controls("br1", "pc-br")  # agent kiểm tra lại với trình duyệt mới
+    assert "Agent đang kiểm tra Google Chrome trên máy pc-br" in _texts(at), _texts(at)
+    jobs.heartbeat("br1", "pc-br", bundle.code_version(), {**GOOD, "browser": "chrome", "browser_ok": False})
+    at.run()
+    assert at.get("dialog") and "Máy pc-br chưa có Google Chrome" in _texts(at), _texts(at)
+    assert [b.proto.url for b in at.get("link_button")] == ["https://www.google.com/chrome/"]
+    jobs.heartbeat("br1", "pc-br", bundle.code_version(), {**GOOD, "browser": "chrome", "browser_ok": True})
+    at.run()  # cài Chrome xong: hộp tự chuyển
+    assert "có Google Chrome" in _texts(at), _texts(at)
+    assert config.browser_channel(config.load_settings(), store.user_browser("br1")) == "chrome"
+    store.set_browser("br1", "")
+    assert config.browser_channel(config.load_settings(), store.user_browser("br1")) == "msedge"  # bỏ chọn: theo team
+    jobs.agent_offline("br1")
 
 
 def test_website_check_machine_starts_installed_agent():

@@ -146,6 +146,9 @@ def _migrate(c) -> None:
     if "checks" not in _columns(c, "agents"):  # agent báo kết quả kiểm tra máy (Edge, VPN, …) cho website
         # Postgres: website và các agent có thể nâng cấp cùng lúc -> IF NOT EXISTS (SQLite không có cú pháp này)
         c.execute("ALTER TABLE agents ADD COLUMN " + ("IF NOT EXISTS " if db.is_remote() else "") + "checks TEXT")
+    if "browser" not in _columns(c, "users"):  # trình duyệt riêng của từng người ('' = theo mặc định của team)
+        c.execute("ALTER TABLE users ADD COLUMN " + ("IF NOT EXISTS " if db.is_remote() else "") +
+                  "browser TEXT NOT NULL DEFAULT ''")
 
 
 SEED_FILES = {"l2m": ("item_ids.json",)}  # Item ID có sẵn theo game (resources/)
@@ -316,6 +319,22 @@ def update_user(username: str, by: str, role: str | None = None, active: bool | 
             changes.append(f"tên hiển thị → {display_name}")
     if changes:
         log(by, "sửa thành viên", username, "; ".join(changes))
+
+
+def set_browser(username: str, channel: str) -> None:
+    """Trình duyệt người dùng tự chọn cho NC tool / MyTool ('' = theo mặc định của team)."""
+    if channel and channel not in config.BROWSERS:
+        raise ValueError(channel)
+    with connect() as c:
+        c.execute("UPDATE users SET browser = ? WHERE username = ?", (channel, username))
+
+
+def user_browser(username: str) -> str:
+    """Không qua bộ nhớ đệm: agent đọc ngay sau khi người dùng vừa đổi trình duyệt trên website."""
+    init()
+    with connect() as c:
+        row = c.execute("SELECT browser FROM users WHERE username = ?", (username,)).fetchone()
+    return (row["browser"] if row else "") or ""
 
 
 def set_password(username: str, password: str, by: str) -> None:

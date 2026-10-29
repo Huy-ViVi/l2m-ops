@@ -9,7 +9,10 @@ Website (máy chủ ở Mỹ) không đọc được máy người dùng: mọi 
 - agent bản cũ (chưa có link đó) đang tắt -> hộp hướng dẫn tải bản mới;
 - chưa có agent -> hộp hướng dẫn cài đặt bằng hình (ui/guide_art.py) + nút tải agent.
 Hộp thoại đang mở được vẽ lại ở mọi lượt chạy của trang (vd mất kết nối rồi nối lại khi vừa bật VPN) cho tới khi người
-dùng đóng nó; nút "Kiểm tra lại" gửi lệnh ngay lúc bấm (on_click) rồi hiện dòng chờ và kết quả.
+dùng đóng nó. Trong hộp có một fragment chạy ngầm (_watch, 2 giây/lần): máy đổi trạng thái (vd vừa bật VPN — agent thử lại
+NC tool mỗi 10 giây khi chưa vào được) thì hộp tự vẽ lại, không cần bấm gì. Bấm "Kiểm tra lại": dòng chờ hiện ngay, lệnh
+gửi tới agent, _watch thấy agent trả lời (hoặc quá RECHECK_WAIT_SECONDS) thì hiện kết quả.
+Đổi trình duyệt ở thanh bên (ui/auth.py) -> agent kiểm tra lại máy với trình duyệt mới rồi báo như lúc đăng nhập.
 """
 from __future__ import annotations
 
@@ -22,16 +25,17 @@ from core import bundle, config, jobs
 from core.i18n import t
 from ui import auth, guide_art
 
-STATE = "machine_check"   # None: chưa kiểm tra · "guide": mở hướng dẫn · "starting": đang bật agent · "report"/"missing" ·
-                          # "setup"/"fix": hộp thoại đang mở · "done"
+STATE = "machine_check"   # None: chưa kiểm tra · "guide": mở hướng dẫn · "starting": đang bật agent · "browser": vừa đổi
+                          # trình duyệt · "report"/"missing" · "setup"/"fix": hộp thoại đang mở · "done"
 DEADLINE = "machine_check_until"
 NOTE = "machine_check_note"        # lời dẫn của hộp cài đặt: "" · "failed" (bật agent không được) · "old" (agent bản cũ)
 HOST = "machine_check_host"        # máy ghi trên tiêu đề hộp sửa / trong lời dẫn
-PENDING = "machine_check_pending"  # vừa bấm "Kiểm tra lại", đang chờ agent: {"mode", "before", "until", "sent"}
+PENDING = "machine_check_pending"  # vừa bấm "Kiểm tra lại": {"mode", "before", "until", "sent"} (mode None: chưa gửi lệnh)
 RESULT = "machine_check_result"    # lần "Kiểm tra lại" vừa xong: {"mode", "ok", "at"} — hiện trong hộp cho người dùng thấy
 START_WAIT_SECONDS = 25
 RECHECK_WAIT_SECONDS = 20
-EDGE_URL = "https://www.microsoft.com/edge/download"
+WATCH_SECONDS = 2
+DOWNLOAD_URLS = {"msedge": "https://www.microsoft.com/edge/download", "chrome": "https://www.google.com/chrome/"}
 
 
 def recheck() -> None:
@@ -66,11 +70,21 @@ def problems(agent: dict) -> list[str]:
     if agent.get("version") != bundle.code_version():
         issues.append("outdated")
     checks = agent.get("checks") or {}
-    if checks.get("edge") is False:
-        issues.append("edge")
+    if checks.get("browser_ok", checks.get("edge")) is False:  # agent bản cũ chỉ báo Edge
+        issues.append("browser")
     if checks.get("nc_tool") is False:
         issues.append("vpn")
     return issues
+
+
+def expected_browser() -> str:
+    """Trình duyệt người đang đăng nhập sẽ dùng (tự chọn ở thanh bên, không thì mặc định của team)."""
+    return config.browser_channel(config.load_settings(), auth.own_browser())
+
+
+def _browser_name(agent: dict | None) -> str:
+    channel = ((agent or {}).get("checks") or {}).get("browser") or expected_browser()
+    return config.BROWSERS.get(channel, channel)
 
 
 def _checked(agent: dict | None) -> bool:
@@ -89,6 +103,10 @@ def machine_check() -> None:
     if state == "starting":
         with st.sidebar:
             _wait_for_agent()
+        return
+    if state == "browser":
+        with st.sidebar:
+            _wait_for_browser()
         return
     if state == "fix":  # hộp đang mở: vẽ lại (trang vừa chạy lại cả trang thì hộp không biến mất)
         _open_fix()
@@ -125,8 +143,33 @@ def _report(agent: dict) -> None:
     if problems(agent):
         _open_fix(agent["host"])
     else:
-        st.toast(t("Máy **{host}** đã đủ điều kiện: agent đang chạy, có Microsoft Edge và vào được NC tool. Các nút NC tool / "
-                   "MyTool đã dùng được.", host=agent["host"]), icon=":material/check_circle:", duration="long")
+        st.toast(_ready_text(agent), icon=":material/check_circle:", duration="long")
+
+
+def _ready_text(agent: dict) -> str:
+    return t("Máy **{host}** đã đủ điều kiện: agent đang chạy, có {browser} và vào được NC tool. Các nút NC tool / MyTool "
+             "đã dùng được.", host=agent["host"], browser=_browser_name(agent))
+
+
+def browser_changed() -> None:
+    """Vừa đổi trình duyệt ở thanh bên (ui/auth.py): nhờ agent kiểm tra lại máy với trình duyệt mới, xong thì báo như
+    lúc đăng nhập (đủ điều kiện, hoặc hộp hướng dẫn nếu máy chưa có trình duyệt đó)."""
+    user = auth.username()
+    if auth.automation_via_agent() and jobs.agent_status(user, fresh=True):
+        jobs.request_check(user)
+        st.session_state[STATE], st.session_state[DEADLINE] = "browser", time.time() + RECHECK_WAIT_SECONDS
+
+
+@st.fragment(run_every=2)
+def _wait_for_browser() -> None:
+    ss = st.session_state
+    agent = jobs.agent_status(auth.username(), fresh=True)
+    want = expected_browser()
+    if not agent or (agent.get("checks") or {}).get("browser") == want or time.time() > ss.get(DEADLINE, 0):
+        ss[STATE] = "report"
+        st.rerun(scope="app")
+    st.caption(t("⏳ Agent đang kiểm tra {browser} trên máy {host}…", browser=config.BROWSERS.get(want, want),
+                 host=agent["host"]))
 
 
 @st.fragment(run_every=2)
@@ -155,27 +198,66 @@ def _launch_link(label: str) -> None:
             f'{escape(label)}</a>', width="content")
 
 
-def _wait(cond, seconds: float) -> None:
-    end = time.monotonic() + seconds
-    while time.monotonic() < end and not cond():
-        time.sleep(1)
-
-
-# ---- nút "Kiểm tra lại" trong hộp thoại ------------------------------------------------------
+# ---- nút "Kiểm tra lại" + theo dõi máy trong hộp thoại ------------------------------------------
 def _ask_recheck() -> None:
-    """Chạy ngay lúc bấm (on_click, trước khi vẽ lại): agent cùng bản -> nhờ nó kiểm tra máy ngay; agent bản cũ -> chờ
-    bản mới báo về; chưa có agent -> chờ agent bật lên."""
-    user = auth.username()
+    """on_click: chỉ ghi lúc bấm, không gọi CSDL (máy chủ ở xa, mỗi lần gọi mất cả giây) để dòng chờ hiện ngay ở lượt vẽ
+    hộp kế tiếp; lệnh gửi ở _pending_note, câu trả lời của agent do _watch theo dõi."""
+    st.session_state[PENDING] = {"mode": None, "before": None, "until": time.time() + RECHECK_WAIT_SECONDS,
+                                 "sent": f"{config.now():%H:%M:%S}"}
+    st.session_state.pop(RESULT, None)
+
+
+def _send_recheck(user: str, pending: dict) -> None:
+    """Agent cùng bản -> nhờ nó kiểm tra máy ngay; agent bản cũ -> chờ bản mới báo về; chưa có agent -> chờ agent bật lên."""
     agent = jobs.agent_status(user, fresh=True)
     if not agent:
-        mode = "find"
+        pending["mode"] = "find"
     elif agent.get("version") != bundle.code_version():  # agent bản cũ không hiểu lệnh kiểm tra lại
-        mode = "update"
+        pending["mode"] = "update"
     else:
-        mode = "check"
+        pending["mode"], pending["before"] = "check", (agent.get("checks") or {}).get("at")
         jobs.request_check(user)
-    st.session_state[PENDING] = {"mode": mode, "before": ((agent or {}).get("checks") or {}).get("at"),
-                                 "until": time.time() + RECHECK_WAIT_SECONDS, "sent": f"{config.now():%H:%M:%S}"}
+
+
+def _status_slot():
+    """Chỗ cố định ở đầu hộp cho dòng chờ / kết quả "Kiểm tra lại". Luôn có (kể cả khi trống) để các phần bên dưới không
+    xê dịch giữa các lượt vẽ — xê dịch thì trong lúc chờ, phần tử cũ (vd nút Để sau) lọt vào chỗ của phần tử mới."""
+    return st.empty()
+
+
+def _pending_note(user: str, slot) -> bool:
+    """Đang chờ lần "Kiểm tra lại": hiện dòng chờ trước mọi thứ khác trong hộp, rồi mới gửi lệnh (lần vẽ đầu sau khi bấm)."""
+    pending = st.session_state.get(PENDING)
+    if not pending:
+        return False
+    slot.info(t("⏳ Đã gửi yêu cầu kiểm tra lúc {time} — đang chờ agent trả lời (tối đa {n} giây)…", time=pending["sent"],
+                n=RECHECK_WAIT_SECONDS), icon=":material/hourglass_top:")
+    if pending["mode"] is None:
+        _send_recheck(user, pending)
+    return True
+
+
+def _seen(agent: dict | None) -> tuple:
+    """Những gì hộp đang hiện phụ thuộc vào: đổi thì vẽ lại hộp."""
+    return ((agent or {}).get("host"), tuple(problems(agent)) if agent else ())
+
+
+@st.fragment(run_every=WATCH_SECONDS)
+def _watch(seen: tuple) -> None:
+    """Chạy ngầm trong hộp đang mở (không vẽ gì): agent trả lời lần "Kiểm tra lại" / quá giờ chờ, hoặc máy tự đổi trạng
+    thái (vd vừa bật VPN) -> chạy lại cả trang để vẽ lại hộp, cả tiêu đề."""
+    ss = st.session_state
+    agent = jobs.agent_status(auth.username(), fresh=True)
+    pending = ss.get(PENDING)
+    if pending and pending["mode"]:
+        ok = _answered(pending, agent)
+        if ok or time.time() > pending["until"]:
+            at = ((agent or {}).get("checks") or {}).get("at") or ""
+            ss[RESULT] = {"mode": pending["mode"], "ok": ok, "at": at[-8:]}
+            ss.pop(PENDING, None)
+            st.rerun()
+    elif not pending and _seen(agent) != seen:
+        st.rerun()
 
 
 def _answered(pending: dict, agent: dict | None) -> bool:
@@ -188,39 +270,22 @@ def _answered(pending: dict, agent: dict | None) -> bool:
     return True
 
 
-def _await_recheck(user: str) -> None:
-    """Vừa bấm "Kiểm tra lại": hiện dòng chờ trong hộp, chờ agent trả lời (tối đa RECHECK_WAIT_SECONDS) rồi ghi kết quả."""
-    ss = st.session_state
-    pending = ss.get(PENDING)
-    if not pending:
-        return
-    note = st.empty()
-    note.info(t("⏳ Đã gửi yêu cầu kiểm tra lúc {time} — đang chờ agent trả lời (tối đa {n} giây)…", time=pending["sent"],
-                n=RECHECK_WAIT_SECONDS), icon=":material/hourglass_top:")
-    _wait(lambda: _answered(pending, jobs.agent_status(user, fresh=True)), pending["until"] - time.time())
-    note.empty()
-    agent = jobs.agent_status(user, fresh=True)
-    at = ((agent or {}).get("checks") or {}).get("at") or ""
-    ss[RESULT] = {"mode": pending["mode"], "ok": _answered(pending, agent), "at": at[-8:]}
-    ss.pop(PENDING, None)
-
-
-def _show_result(host: str) -> None:
+def _show_result(host: str, slot) -> None:
     """Kết quả lần "Kiểm tra lại" vừa xong (để người dùng thấy đã kiểm tra, kể cả khi máy vẫn còn thiếu)."""
     res = st.session_state.pop(RESULT, None)
     if not res:
         return
     if res["ok"] and res["mode"] == "check":
-        st.info(t("Agent vừa kiểm tra lại máy {host} lúc {time}.", host=host, time=res["at"]), icon=":material/fact_check:")
+        slot.info(t("Agent vừa kiểm tra lại máy {host} lúc {time}.", host=host, time=res["at"]), icon=":material/fact_check:")
     elif not res["ok"] and res["mode"] == "check":
-        st.warning(t("Agent trên máy {host} chưa trả lời sau {n} giây. Bấm Kiểm tra lại lần nữa; vẫn vậy thì mở lại agent.bat "
-                     "trên máy đó.", host=host, n=RECHECK_WAIT_SECONDS), icon=":material/timer_off:")
+        slot.warning(t("Agent trên máy {host} chưa trả lời sau {n} giây. Bấm Kiểm tra lại lần nữa; vẫn vậy thì mở lại agent.bat "
+                       "trên máy đó.", host=host, n=RECHECK_WAIT_SECONDS), icon=":material/timer_off:")
     elif not res["ok"] and res["mode"] == "update":
-        st.warning(t("Chưa thấy agent bản mới báo về. Giải nén bản mới đè lên thư mục agent cũ rồi mở lại agent.bat."),
-                   icon=":material/timer_off:")
+        slot.warning(t("Chưa thấy agent bản mới báo về. Giải nén bản mới đè lên thư mục agent cũ rồi mở lại agent.bat."),
+                     icon=":material/timer_off:")
     elif not res["ok"]:
-        st.warning(t("Chưa thấy agent báo về sau {n} giây. Xem chấm tròn ở khay hệ thống (góc phải thanh tác vụ); chưa có thì "
-                     "làm theo các bước bên dưới.", n=RECHECK_WAIT_SECONDS), icon=":material/timer_off:")
+        slot.warning(t("Chưa thấy agent báo về sau {n} giây. Xem chấm tròn ở khay hệ thống (góc phải thanh tác vụ); chưa có thì "
+                       "làm theo các bước bên dưới.", n=RECHECK_WAIT_SECONDS), icon=":material/timer_off:")
 
 
 # ---- hộp hướng dẫn cài đặt --------------------------------------------------------------
@@ -241,7 +306,8 @@ def _requirements() -> None:
     windows = browser_on_windows()
     rows = [(":material/check_circle:" if windows else ":material/cancel:",
              t("Máy Windows 10/11") + ("" if windows else " — " + t("trình duyệt này không chạy trên Windows"))),
-            (":material/public:", t("Microsoft Edge (có sẵn trên Windows)")),
+            (":material/public:", t("Microsoft Edge (có sẵn trên Windows) hoặc Google Chrome — chọn ở ô Trình duyệt, thanh "
+                                    "bên trái")),
             (":material/vpn_lock:", t("VPN công ty khi chạy NC tool / MyTool")),
             (":material/wifi:", t("Internet ở lần cài đầu (tự tải Python ~15 MB + thư viện)")),
             (":material/shield:", t("Không cần quyền admin, không cần cài Python trước"))]
@@ -270,9 +336,11 @@ def _steps(site: str, user: str) -> list[tuple[str, str, str]]:
 def _setup_body() -> None:
     ss = st.session_state
     user = auth.username()
-    _await_recheck(user)
+    slot = _status_slot()
+    pending = _pending_note(user, slot)
     agent = jobs.agent_status(user, fresh=True)
-    if agent:
+    _watch(_seen(agent))
+    if agent and not pending:
         ss.pop(RESULT, None)
         if problems(agent):
             st.warning(t("Đã thấy agent trên máy **{host}**, nhưng còn thiếu vài bước.", host=agent["host"]),
@@ -286,7 +354,8 @@ def _setup_body() -> None:
                 st.rerun()
         return
     note = ss.get(NOTE, "")
-    _show_result("")
+    if not pending:
+        _show_result("", slot)
     if note == "old":
         st.warning(t("Agent trên máy **{host}** là bản cũ: website chưa bật được và chưa kiểm tra được máy. Tải agent bản mới "
                      "bên dưới, giải nén đè lên thư mục agent cũ rồi mở **agent.bat** một lần — từ lần sau website tự bật agent.",
@@ -302,7 +371,7 @@ def _setup_body() -> None:
         auth.agent_download_button("agent_zip_dialog", primary=True)
         if note != "old":  # agent bản cũ không có link này
             _launch_link(t("▶ Bật agent"))
-        st.button(t("Kiểm tra lại"), key="setup_recheck", icon=":material/refresh:", on_click=_ask_recheck)
+        st.button(t("Kiểm tra lại"), key="setup_recheck", icon=":material/refresh:", on_click=_ask_recheck, disabled=pending)
     st.divider()
     for i, (caption, svg, alt) in enumerate(_steps(auth.site_url(), user), 1):
         st.markdown(f"**{i}.** {caption}")
@@ -316,31 +385,40 @@ def _open_fix(host: str | None = None) -> None:
     if host is not None:
         ss[STATE], ss[HOST] = "fix", host
         ss.pop(RESULT, None)
-    st.dialog(t("Máy {host} cần thêm vài bước", host=ss.get(HOST, "")), width="medium", icon=":material/build:",
-              on_dismiss=_close)(_fix_body)()
+    agent = jobs.agent_status(auth.username(), fresh=True)
+    if agent and not problems(agent) and not ss.get(PENDING):  # máy vừa đủ điều kiện: tiêu đề cũng đổi theo
+        title, icon = t("Máy {host} đã đủ điều kiện", host=agent["host"]), ":material/check_circle:"
+    else:
+        title, icon = t("Máy {host} cần thêm vài bước", host=ss.get(HOST, "")), ":material/build:"
+    st.dialog(title, width="medium", icon=icon, on_dismiss=_close)(_fix_body)()
 
 
 def _fix_body() -> None:
     user = auth.username()
-    _await_recheck(user)
+    slot = _status_slot()
+    pending = _pending_note(user, slot)
     agent = jobs.agent_status(user, fresh=True)
+    _watch(_seen(agent))
     if not agent:
-        st.session_state.pop(RESULT, None)
+        if not pending:
+            _show_result("", slot)
         st.warning(t("Agent vừa tắt. Bấm **▶ Bật agent** (máy đã cài) hoặc mở lại agent.bat."), icon=":material/power_off:")
         with st.container(horizontal=True, vertical_alignment="center"):
             _launch_link(t("▶ Bật agent"))
-            st.button(t("Kiểm tra lại"), key="fix_find", icon=":material/refresh:", on_click=_ask_recheck)
+            st.button(t("Kiểm tra lại"), key="fix_find", icon=":material/refresh:", on_click=_ask_recheck, disabled=pending)
         return
     issues = problems(agent)
     host = agent["host"]
-    if not issues:
+    if not issues and not pending:
         st.session_state.pop(RESULT, None)
-        st.success(t("Máy **{host}** đã đủ điều kiện: agent đang chạy, có Microsoft Edge và vào được NC tool. Các nút NC tool / "
-                     "MyTool đã dùng được.", host=host), icon=":material/check_circle:")
+        st.success(_ready_text(agent), icon=":material/check_circle:")
         if st.button(t("Đóng"), type="primary", key="fix_close", on_click=_close):
             st.rerun()
         return
-    _show_result(host)
+    if not pending:
+        _show_result(host, slot)
+    if not issues:  # đang chờ agent trả lời lần "Kiểm tra lại" mà máy đã ổn
+        return
     st.markdown(t("Agent đang chạy trên máy **{host}**, nhưng còn thiếu:", host=host))
     if "outdated" in issues:
         with st.container(border=True):
@@ -348,19 +426,24 @@ def _fix_body() -> None:
                         t("Tải agent bản mới, giải nén đè lên thư mục agent cũ rồi mở lại agent.bat (agent cũ tự tắt)."))
             auth.agent_download_button("agent_zip_fix", primary=True)
     if "vpn" in issues:
-        at = ((agent.get("checks") or {}).get("at") or "")[-8:]
         with st.container(border=True):
             st.markdown(":material/vpn_lock: **" + t("Chưa vào được NC tool") + "**  \n" +
-                        t("Bật VPN công ty trên máy {host} rồi bấm Kiểm tra lại. Nếu VPN đã bật mà vẫn báo: kiểm tra địa chỉ NC "
-                          "tool ở trang Cài đặt.", host=host))
-            if at:
-                st.caption(t("Agent thử kết nối NC tool lần cuối lúc {time} (tự thử lại mỗi phút).", time=at))
-    if "edge" in issues:
+                        t("Bật VPN công ty trên máy {host}. Agent tự thử lại mỗi 10 giây: vào được NC tool là hộp này tự chuyển "
+                          "sang đủ điều kiện, không cần bấm gì. Nếu VPN đã bật mà vẫn báo: kiểm tra địa chỉ NC tool ở trang Cài "
+                          "đặt.", host=host))
+    if "browser" in issues:
+        channel = (agent.get("checks") or {}).get("browser") or "msedge"
+        name = config.BROWSERS.get(channel, channel)
         with st.container(border=True):
-            st.markdown(":material/public: **" + t("Máy {host} chưa có Microsoft Edge", host=host) + "**  \n" +
-                        t("Thao tác NC tool / MyTool mở Edge để dùng phiên SSO của bạn. Cài Edge rồi bấm Kiểm tra lại."))
-            st.link_button(t("Tải Microsoft Edge"), EDGE_URL, icon=":material/open_in_new:")
+            st.markdown(":material/public: **" + t("Máy {host} chưa có {browser}", host=host, browser=name) + "**  \n" +
+                        t("Thao tác NC tool / MyTool mở {browser} để dùng phiên SSO của bạn. Cài {browser}, hoặc chọn trình duyệt "
+                          "khác ở ô Trình duyệt (thanh bên trái).", browser=name))
+            if channel in DOWNLOAD_URLS:
+                st.link_button(t("Tải {browser}", browser=name), DOWNLOAD_URLS[channel], icon=":material/open_in_new:")
+            else:
+                st.caption(t("Chromium của Playwright không cài sẵn cùng agent — nên chọn Microsoft Edge hoặc Google Chrome."))
     with st.container(horizontal=True):
-        st.button(t("Kiểm tra lại"), type="primary", key="fix_recheck", icon=":material/refresh:", on_click=_ask_recheck)
+        st.button(t("Kiểm tra lại"), type="primary", key="fix_recheck", icon=":material/refresh:", on_click=_ask_recheck,
+                  disabled=pending)
         if st.button(t("Để sau"), key="fix_later", on_click=_close):
             st.rerun()

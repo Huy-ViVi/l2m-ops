@@ -387,7 +387,7 @@ def automation_notice() -> bool:
 
 
 def run_job(job: str, payload: dict, title: str) -> dict | None:
-    payload = {"game": game()["id"], **payload}
+    payload = {"game": game()["id"], "_browser": auth.own_browser(), **payload}
     if auth.automation_local():
         return _run_local(job, payload, title)
     if auth.automation_via_agent():

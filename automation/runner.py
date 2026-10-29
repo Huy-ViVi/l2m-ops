@@ -58,8 +58,9 @@ def run(job: str, payload: dict) -> dict:
     log(f"🎮 Game: {game['name']} (app group {game['nc_app_group'] or '?'})")
     base = auto["nc_base_url"].rstrip("/")
     preflight(job, payload, auto, game)
+    channel = config.browser_channel(settings, payload.get("_browser", ""))  # trình duyệt người bấm tự chọn trên website
     # L2M_HEADLESS=1: không hiện cửa sổ trình duyệt (chỉ dùng khi test — thao tác thật cần người xem và bấm Register)
-    with browser(config.BROWSER_PROFILE_DIR, auto.get("browser_channel", "msedge"), headless=config.env("L2M_HEADLESS") == "1") as ctx:
+    with browser(config.BROWSER_PROFILE_DIR, channel, headless=config.env("L2M_HEADLESS") == "1") as ctx:
         if job == "login":
             urls = payload.get("urls") or [f"{base}/MobileGoodsAdmin/goods"] + [u for u in [game["mytool_search_order"].get("SEA")] if u]
             for url in urls:
@@ -154,9 +155,9 @@ def main() -> int:
         result = {"ok": False, "error": str(e), "kind": "network"}
     except Exception as e:  # noqa: BLE001 — trả lỗi về UI thay vì crash im lặng
         friendly = netcheck.explain(str(e))
-        if type(e).__name__ == "TargetClosedError":  # người dùng đóng cửa sổ Edge giữa chừng
-            message = t("Trình duyệt đã bị đóng trước khi thao tác xong. Chạy lại và giữ cửa sổ Edge mở tới khi log báo xong "
-                        "(nếu cửa sổ bật lên trên máy người khác: bạn đang dùng tài khoản của họ).")
+        if type(e).__name__ == "TargetClosedError":  # người dùng đóng cửa sổ trình duyệt giữa chừng
+            message = t("Trình duyệt đã bị đóng trước khi thao tác xong. Chạy lại và giữ cửa sổ trình duyệt mở tới khi log báo "
+                        "xong (nếu cửa sổ bật lên trên máy người khác: bạn đang dùng tài khoản của họ).")
             log(f"✗ {message}")
             result = {"ok": False, "error": message, "kind": "closed"}
         elif friendly:

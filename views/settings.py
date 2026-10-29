@@ -122,8 +122,12 @@ st.subheader(t("Trình duyệt & NC tool (dùng chung mọi game)"))
 auto = settings["automation"]
 c1, c2 = st.columns(2)
 channels = ["msedge", "chrome", "chromium"]
-auto["browser_channel"] = c1.selectbox(t("Trình duyệt"), channels, index=channels.index(auto.get("browser_channel", "msedge")),
-                                       help=t("msedge = Microsoft Edge có sẵn trên Windows (không cần tải thêm)."))
+auto["browser_channel"] = c1.selectbox(t("Trình duyệt mặc định"), channels,
+                                       index=channels.index(auto.get("browser_channel", "msedge")),
+                                       format_func=lambda c: config.BROWSERS.get(c, c),
+                                       help=t("Dùng cho người chưa tự chọn trình duyệt (ô Trình duyệt ở thanh bên trái — mỗi người chọn "
+                                              "cho riêng mình). Microsoft Edge có sẵn trên Windows; Chromium của Playwright không "
+                                              "cài sẵn cùng agent."))
 auto["submit_mode"] = c2.selectbox(t("Mặc định khi tạo gói NC"), ["manual", "auto"],
                                    index=0 if auto.get("submit_mode") == "manual" else 1,
                                    format_func=lambda m: t("Tôi tự bấm Register") if m == "manual" else t("App tự bấm Register"))

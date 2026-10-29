@@ -34,6 +34,7 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 MASTER_DIR = DATA_DIR / "master"
 WORK_DIR = DATA_DIR / "work"
 BROWSER_PROFILE_DIR = DATA_DIR / "browser-profile"
+BROWSERS = {"msedge": "Microsoft Edge", "chrome": "Google Chrome", "chromium": "Chromium (Playwright)"}  # kênh Playwright
 
 MARKETS = ["SG", "ID", "PH", "MY", "TH", "VN"]
 DEFAULT_GAME = "l2m"
@@ -237,6 +238,11 @@ def game(settings: dict, gid: str | None = None) -> dict:
     """Hồ sơ game (kèm 'id'). Không truyền gid -> game mặc định."""
     gid = gid if gid in settings["games"] else settings.get("default_game", DEFAULT_GAME)
     return {"id": gid, **settings["games"][gid]}
+
+
+def browser_channel(settings: dict, own: str = "") -> str:
+    """Trình duyệt mở NC tool / MyTool: người dùng tự chọn (own), không chọn thì theo mặc định của team."""
+    return own if own in BROWSERS else settings["automation"].get("browser_channel") or "msedge"
 
 
 def game_id_from_name(name: str) -> str:

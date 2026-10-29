@@ -205,6 +205,21 @@ def edge_installed() -> bool:
     return any(r and (Path(r) / "Microsoft" / "Edge" / "Application" / "msedge.exe").is_file() for r in roots)
 
 
+def chrome_installed() -> bool:
+    roots = [os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), os.environ.get("LOCALAPPDATA")]
+    return any(r and (Path(r) / "Google" / "Chrome" / "Application" / "chrome.exe").is_file() for r in roots)
+
+
+def chromium_installed() -> bool:
+    """Chromium riêng của Playwright (tải bằng "playwright install chromium" — agent không tự tải)."""
+    root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or str(Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright")
+    return any(Path(root).glob("chromium-*/chrome-win*/chrome.exe"))
+
+
+def browser_installed(channel: str) -> bool:
+    return {"msedge": edge_installed, "chrome": chrome_installed, "chromium": chromium_installed}.get(channel, edge_installed)()
+
+
 def startup_folder() -> Path:
     buf = ctypes.create_unicode_buffer(260)
     SHGetFolderPathW(None, CSIDL_STARTUP, None, 0, buf)

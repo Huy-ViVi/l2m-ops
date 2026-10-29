@@ -151,7 +151,12 @@ EN = {
         "Failed top-up cases are saved to <root folder>\\Payment-Error-Cases\\<YYYY-MM-DD>\\",
     "Trình duyệt & NC tool (dùng chung mọi game)": "Browser & NC tool (shared by all games)",
     "Trình duyệt": "Browser",
-    "msedge = Microsoft Edge có sẵn trên Windows (không cần tải thêm).": "msedge = Microsoft Edge, built into Windows (nothing to download).",
+    "Trình duyệt mặc định": "Default browser",
+    "Dùng cho người chưa tự chọn trình duyệt (ô Trình duyệt ở thanh bên trái — mỗi người chọn "
+    "cho riêng mình). Microsoft Edge có sẵn trên Windows; Chromium của Playwright không "
+    "cài sẵn cùng agent.":
+        "Used by anyone who has not picked their own browser (the Browser box in the sidebar — each person picks their own). "
+        "Microsoft Edge is built into Windows; Playwright's Chromium is not installed with the agent.",
     "Mặc định khi tạo gói NC": "Default when creating NC packages",
     "Tôi tự bấm Register": "I click Register myself",
     "App tự bấm Register": "The app clicks Register",

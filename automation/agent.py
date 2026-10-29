@@ -45,7 +45,8 @@ FLUSH_SECONDS = 1
 CANCEL_CHECK_SECONDS = 3
 CONTROL_SECONDS = 2        # nhịp kiểm tra lệnh điều khiển từ website (vd hiện cửa sổ)
 SITE_CHECK_SECONDS = 60    # nhịp xem website có bản code mới không
-MACHINE_CHECK_SECONDS = 60  # nhịp tự kiểm tra máy (Edge, VPN, …) báo lên website
+MACHINE_CHECK_SECONDS = 60  # nhịp tự kiểm tra máy (trình duyệt, VPN, …) báo lên website
+UNREACHABLE_CHECK_SECONDS = 10  # chưa vào được NC tool: thử lại dày hơn để vừa bật VPN là website thấy ngay
 REACH_TIMEOUT = 3
 LOG_MAX_BYTES = 2_000_000
 READY_TIMEOUT = 120
@@ -217,7 +218,9 @@ def machine_checks(username: str) -> dict:
     if os.name == "nt":
         from automation import desktop
 
-        checks.update(edge=desktop.edge_installed(), autostart=autostart_on(username), protocol=protocol_ok())
+        channel = config.browser_channel(settings, store.user_browser(username))
+        checks.update(browser=channel, browser_ok=desktop.browser_installed(channel), edge=desktop.edge_installed(),
+                      autostart=autostart_on(username), protocol=protocol_ok())
     return checks
 
 
@@ -278,7 +281,8 @@ class Heartbeat(threading.Thread):
 
     def _check_loop(self) -> None:
         """Tự kiểm tra máy ở luồng riêng (thử kết nối NC tool / MyTool mất vài giây), xong thì báo ngay.
-        Website bấm "Kiểm tra lại" -> kiểm tra ngay thay vì chờ hết phút. NC tool đổi trạng thái thì ghi vào log."""
+        Website bấm "Kiểm tra lại" -> kiểm tra ngay thay vì chờ hết phút; chưa vào được NC tool thì thử lại mỗi
+        UNREACHABLE_CHECK_SECONDS (vừa bật VPN là website tự đổi sang "đủ điều kiện"). NC tool đổi trạng thái thì ghi log."""
         reach = None
         while not self.stopped.is_set():
             try:
@@ -290,7 +294,7 @@ class Heartbeat(threading.Thread):
                     say(t("✓ Vào được NC tool.") if reach else t("⚠ Chưa vào được NC tool — bật VPN công ty."))
             except Exception:  # noqa: BLE001 — mất mạng / CSDL: lần sau thử lại
                 pass
-            self.recheck.wait(MACHINE_CHECK_SECONDS)
+            self.recheck.wait(UNREACHABLE_CHECK_SECONDS if reach is False else MACHINE_CHECK_SECONDS)
             self.recheck.clear()
 
     def stop(self) -> None:

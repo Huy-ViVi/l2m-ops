@@ -6,10 +6,11 @@ EN = {
     "cần một máy Windows đã cài agent.":
         "You are on a non-Windows device: you can view and edit data as usual; the NC tool / MyTool buttons need a Windows "
         "machine with the agent installed.",
-    "Máy **{host}** đã đủ điều kiện: agent đang chạy, có Microsoft Edge và vào được NC tool. Các nút NC tool / "
-    "MyTool đã dùng được.":
-        "**{host}** is ready: the agent is running, Microsoft Edge is installed and NC tool is reachable. The NC tool / "
-        "MyTool buttons are ready to use.",
+    "Máy **{host}** đã đủ điều kiện: agent đang chạy, có {browser} và vào được NC tool. Các nút NC tool / MyTool "
+    "đã dùng được.":
+        "**{host}** is ready: the agent is running, {browser} is installed and NC tool is reachable. The NC tool / MyTool "
+        "buttons are ready to use.",
+    "⏳ Agent đang kiểm tra {browser} trên máy {host}…": "⏳ The agent is checking {browser} on {host}…",
     "⏳ Đang bật agent trên máy bạn… Trình duyệt hỏi mở **L2M Ops Agent** thì tick **Always allow** rồi bấm "
     "**Open**. Không thấy trình duyệt hỏi: bấm nút dưới đây.":
         "⏳ Starting the agent on your machine… If the browser asks to open **L2M Ops Agent**, tick **Always allow** and click "
@@ -33,12 +34,12 @@ EN = {
         "below, unzip it over the old agent folder and open **agent.bat** once — after that the website starts the agent itself.",
     "Đã thấy agent trên máy **{host}**, nhưng còn thiếu vài bước.": "Found the agent on **{host}**, but a few steps are missing.",
     "Xem các bước còn thiếu": "See the missing steps",
-    "Agent thử kết nối NC tool lần cuối lúc {time} (tự thử lại mỗi phút).":
-        "The agent last tried to reach NC tool at {time} (it retries every minute).",
     "Cài agent cho máy này": "Install the agent on this machine",
     "Máy Windows 10/11": "Windows 10/11 PC",
     "trình duyệt này không chạy trên Windows": "this browser is not running on Windows",
-    "Microsoft Edge (có sẵn trên Windows)": "Microsoft Edge (built into Windows)",
+    "Microsoft Edge (có sẵn trên Windows) hoặc Google Chrome — chọn ở ô Trình duyệt, thanh "
+    "bên trái":
+        "Microsoft Edge (built into Windows) or Google Chrome — pick it in the Browser box in the sidebar",
     "VPN công ty khi chạy NC tool / MyTool": "Company VPN when running NC tool / MyTool",
     "Internet ở lần cài đầu (tự tải Python ~15 MB + thư viện)": "Internet for the first install (downloads Python ~15 MB + libraries)",
     "Không cần quyền admin, không cần cài Python trước": "No admin rights needed, no need to install Python first",
@@ -84,6 +85,7 @@ EN = {
         "Install it once, about 3 minutes.",
     "▶ Bật agent": "▶ Start agent",
     "Máy {host} cần thêm vài bước": "{host} needs a few more steps",
+    "Máy {host} đã đủ điều kiện": "{host} is ready",
     "Agent vừa tắt. Bấm **▶ Bật agent** (máy đã cài) hoặc mở lại agent.bat.":
         "The agent just stopped. Click **▶ Start agent** (if installed on this machine) or reopen agent.bat.",
     "Agent đang chạy trên máy **{host}**, nhưng còn thiếu:": "The agent is running on **{host}**, but something is missing:",
@@ -91,20 +93,31 @@ EN = {
     "Tải agent bản mới, giải nén đè lên thư mục agent cũ rồi mở lại agent.bat (agent cũ tự tắt).":
         "Download the new agent, unzip it over the old agent folder and reopen agent.bat (the old agent stops by itself).",
     "Chưa vào được NC tool": "NC tool is not reachable",
-    "Bật VPN công ty trên máy {host} rồi bấm Kiểm tra lại. Nếu VPN đã bật mà vẫn báo: kiểm tra địa chỉ NC "
-    "tool ở trang Cài đặt.":
-        "Turn on the company VPN on {host}, then click Check again. If the VPN is on and this still shows: check the NC tool "
-        "address on the Settings page.",
-    "Máy {host} chưa có Microsoft Edge": "{host} does not have Microsoft Edge",
-    "Thao tác NC tool / MyTool mở Edge để dùng phiên SSO của bạn. Cài Edge rồi bấm Kiểm tra lại.":
-        "NC tool / MyTool actions open Edge to use your SSO sign-in. Install Edge, then click Check again.",
-    "Tải Microsoft Edge": "Download Microsoft Edge",
+    "Bật VPN công ty trên máy {host}. Agent tự thử lại mỗi 10 giây: vào được NC tool là hộp này tự chuyển "
+    "sang đủ điều kiện, không cần bấm gì. Nếu VPN đã bật mà vẫn báo: kiểm tra địa chỉ NC tool ở trang Cài "
+    "đặt.":
+        "Turn on the company VPN on {host}. The agent retries every 10 seconds: once NC tool is reachable this box turns ready "
+        "by itself, no need to click anything. If the VPN is on and this still shows: check the NC tool address on the "
+        "Settings page.",
+    "Máy {host} chưa có {browser}": "{host} does not have {browser}",
+    "Thao tác NC tool / MyTool mở {browser} để dùng phiên SSO của bạn. Cài {browser}, hoặc chọn trình duyệt "
+    "khác ở ô Trình duyệt (thanh bên trái).":
+        "NC tool / MyTool actions open {browser} to use your SSO sign-in. Install {browser}, or pick another browser in the "
+        "Browser box (sidebar).",
+    "Tải {browser}": "Download {browser}",
+    "Chromium của Playwright không cài sẵn cùng agent — nên chọn Microsoft Edge hoặc Google Chrome.":
+        "Playwright's Chromium is not installed with the agent — pick Microsoft Edge or Google Chrome instead.",
     "Để sau": "Later",
     # ---- ui/auth.py, ui/common.py -------------------------------------------------------
     "Kiểm tra máy": "Check machine",
     "Kiểm tra máy bạn đã đủ điều kiện chạy NC tool / MyTool chưa; thiếu gì sẽ hiện hướng dẫn.":
         "Check whether your machine is ready to run NC tool / MyTool; anything missing comes with instructions.",
     "Hướng dẫn cài agent": "Agent install guide",
+    "Theo team ({browser})": "Team default ({browser})",
+    "Trình duyệt mở NC tool / MyTool trên máy của bạn (chỉ áp dụng cho tài khoản của bạn). Đổi trình duyệt "
+    "thì đăng nhập SSO lại một lần trong trình duyệt mới.":
+        "The browser that opens NC tool / MyTool on your machine (applies to your account only). After switching, sign in "
+        "to SSO once in the new browser.",
     # ---- ui/guide_art.py ---------------------------------------------------------------
     "Đang chạy lệnh": "Running a job",
     "Cần chú ý: mất mạng / có bản mới": "Needs attention: offline / new version",
