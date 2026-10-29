@@ -287,32 +287,53 @@ def test_website_check_machine_ready():
 
 
 def test_website_check_machine_needs_vpn():
-    """Agent chạy nhưng không vào được NC tool -> hộp hướng dẫn bật VPN; "Kiểm tra lại" gửi lệnh cho agent."""
+    """Agent chạy nhưng không vào được NC tool -> hộp hướng dẫn bật VPN. Hộp không mất khi cả trang chạy lại; "Kiểm tra lại"
+    gửi lệnh cho agent ngay lúc bấm và ghi rõ agent đã kiểm tra lúc nào, kể cả khi máy vẫn còn thiếu."""
     from core import bundle
-
-    _website_env()
-    from streamlit.testing.v1 import AppTest
 
     _website_env()
     jobs.heartbeat("vpn1", "pc-vpn", bundle.code_version(), {**GOOD, "nc_tool": False})
     at = _after_login("vpn1")
     assert at.get("dialog"), "không mở hộp hướng dẫn"
     assert "Chưa vào được NC tool" in _texts(at) and "Bật VPN công ty trên máy pc-vpn" in _texts(at), _texts(at)
-    # Bấm nút trong hộp: trên website chỉ hộp chạy lại; AppTest chạy lại cả script nên dùng script mở hộp mỗi lượt.
-    fix = AppTest.from_string("from ui import agent_setup\nagent_setup._open_fix('pc-vpn')\n", default_timeout=60)
-    fix.session_state["auth_user"] = store.get_user("vpn1")
-    fix.run()
-    # người dùng vừa bật VPN; agent nhận lệnh kiểm tra lại và báo kết quả mới sau vài giây
-    threading.Timer(2, jobs.heartbeat, ("vpn1", "pc-vpn", bundle.code_version(), {**GOOD, "at": "2026-10-28 09:05:00"})).start()
-    fix.button(key="fix_recheck").click().run()
-    assert not fix.exception, fix.exception
+    assert "lần cuối lúc 09:00:00" in _texts(at), _texts(at)
+    at.run()  # cả trang chạy lại (vd bật VPN làm mất kết nối rồi nối lại): hộp vẫn mở
+    assert at.get("dialog") and "Chưa vào được NC tool" in _texts(at)
+
+    def agent_answers(checks: dict) -> None:  # agent nhận lệnh kiểm tra lại, vài giây sau báo kết quả mới
+        threading.Timer(4, jobs.heartbeat, ("vpn1", "pc-vpn", bundle.code_version(), checks)).start()
+
+    agent_answers({**GOOD, "nc_tool": False, "at": "2026-10-28 09:03:00"})  # VPN vẫn chưa vào được
+    at.button(key="fix_recheck").click().run()
+    assert not at.exception, at.exception
     assert jobs.CHECK_MACHINE in jobs.claim_controls("vpn1", "pc-vpn")  # website nhờ agent kiểm tra lại ngay
-    assert "đủ điều kiện" in _texts(fix), _texts(fix)
+    assert "Agent vừa kiểm tra lại máy pc-vpn lúc 09:03:00" in _texts(at), _texts(at)
+    assert at.get("dialog") and "Chưa vào được NC tool" in _texts(at)
+    agent_answers({**GOOD, "at": "2026-10-28 09:05:00"})  # người dùng đã bật VPN
+    at.button(key="fix_recheck").click().run()
+    assert "đủ điều kiện" in _texts(at), _texts(at)
+    at.button(key="fix_close").click().run()
+    assert not at.get("dialog")
+    at.run()
+    assert not at.get("dialog"), "đóng rồi mà hộp mở lại"
     jobs.agent_offline("vpn1")
 
 
+def test_website_check_machine_old_agent_offline():
+    """Agent bản cũ (chưa đăng ký link l2mops-agent://) đang tắt -> không thử bật, mở ngay hướng dẫn tải bản mới."""
+    _website_env()
+    jobs.heartbeat("old1", "pc-old", "old-version")
+    jobs.agent_offline("old1")
+    at = _after_login("old1")
+    assert at.session_state["machine_check"] == "setup" and at.get("dialog")
+    assert "Agent trên máy **pc-old** là bản cũ" in _texts(at), _texts(at)
+    assert not any(f"{jobs.PROTOCOL}://" in h.proto.body for h in at.get("html")), "agent bản cũ không có link để bật"
+
+
 def test_website_check_machine_new_user():
-    """Chưa từng cài agent -> hộp hướng dẫn cài đặt: 7 hình + nút tải zip + nút bật agent."""
+    """Chưa từng cài agent -> hộp hướng dẫn cài đặt: 7 hình + nút tải zip + nút bật agent; cài xong bấm Kiểm tra lại."""
+    from core import bundle
+
     _website_env()
     at = _after_login("new1")
     assert at.get("dialog"), "không mở hộp hướng dẫn"
@@ -320,6 +341,11 @@ def test_website_check_machine_new_user():
     assert [b.proto.label for b in at.get("download_button")].count("⬇ Tải agent cho máy này") == 2  # thanh bên + hộp hướng dẫn
     assert any(f"{jobs.PROTOCOL}://start" in h.proto.body for h in at.get("html")), "thiếu nút bật agent"
     assert "Cài một lần" in _texts(at)
+    threading.Timer(3, jobs.heartbeat, ("new1", "pc-new", bundle.code_version(), GOOD)).start()  # agent.bat vừa chạy xong
+    at.button(key="setup_recheck").click().run()
+    assert not at.exception, at.exception
+    assert "Đã thấy agent trên máy **pc-new**" in _texts(at), _texts(at)
+    jobs.agent_offline("new1")
 
 
 def test_website_check_machine_starts_installed_agent():
@@ -333,6 +359,7 @@ def test_website_check_machine_starts_installed_agent():
     assert at.session_state["machine_check"] == "starting"
     assert any(f"{jobs.PROTOCOL}://start" in h.proto.body and "<script" in h.proto.body for h in at.get("html"))
     assert "Đang bật agent trên máy bạn" in _texts(at)
+    assert sum(f"{jobs.PROTOCOL}://start" in h.proto.body for h in at.get("html")) == 2  # tự bấm + nút để người dùng bấm
     assert not at.get("dialog")
     jobs.heartbeat("known1", "pc-known", bundle.code_version(), GOOD)  # trình duyệt đã mở agent, agent báo về
     at.run()

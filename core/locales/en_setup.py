@@ -10,8 +10,31 @@ EN = {
     "MyTool đã dùng được.":
         "**{host}** is ready: the agent is running, Microsoft Edge is installed and NC tool is reachable. The NC tool / "
         "MyTool buttons are ready to use.",
-    "⏳ Đang bật agent trên máy bạn… Trình duyệt hỏi mở **L2M Ops Agent** thì tick **Always allow** rồi bấm **Open**.":
-        "⏳ Starting the agent on your machine… If the browser asks to open **L2M Ops Agent**, tick **Always allow** and click **Open**.",
+    "⏳ Đang bật agent trên máy bạn… Trình duyệt hỏi mở **L2M Ops Agent** thì tick **Always allow** rồi bấm "
+    "**Open**. Không thấy trình duyệt hỏi: bấm nút dưới đây.":
+        "⏳ Starting the agent on your machine… If the browser asks to open **L2M Ops Agent**, tick **Always allow** and click "
+        "**Open**. No prompt? Click the button below.",
+    "⏳ Đã gửi yêu cầu kiểm tra lúc {time} — đang chờ agent trả lời (tối đa {n} giây)…":
+        "⏳ Check requested at {time} — waiting for the agent to answer (up to {n} seconds)…",
+    "Agent vừa kiểm tra lại máy {host} lúc {time}.": "The agent re-checked {host} at {time}.",
+    "Agent trên máy {host} chưa trả lời sau {n} giây. Bấm Kiểm tra lại lần nữa; vẫn vậy thì mở lại agent.bat "
+    "trên máy đó.":
+        "The agent on {host} did not answer within {n} seconds. Click Check again once more; if it still fails, reopen agent.bat "
+        "on that machine.",
+    "Chưa thấy agent bản mới báo về. Giải nén bản mới đè lên thư mục agent cũ rồi mở lại agent.bat.":
+        "The new agent has not reported in yet. Unzip the new version over the old agent folder and reopen agent.bat.",
+    "Chưa thấy agent báo về sau {n} giây. Xem chấm tròn ở khay hệ thống (góc phải thanh tác vụ); chưa có thì "
+    "làm theo các bước bên dưới.":
+        "No agent reported in within {n} seconds. Look for the dot in the system tray (right end of the taskbar); if it is not "
+        "there, follow the steps below.",
+    "Agent trên máy **{host}** là bản cũ: website chưa bật được và chưa kiểm tra được máy. Tải agent bản mới "
+    "bên dưới, giải nén đè lên thư mục agent cũ rồi mở **agent.bat** một lần — từ lần sau website tự bật agent.":
+        "The agent on **{host}** is an old version: the website cannot start it or check the machine. Download the new agent "
+        "below, unzip it over the old agent folder and open **agent.bat** once — after that the website starts the agent itself.",
+    "Đã thấy agent trên máy **{host}**, nhưng còn thiếu vài bước.": "Found the agent on **{host}**, but a few steps are missing.",
+    "Xem các bước còn thiếu": "See the missing steps",
+    "Agent thử kết nối NC tool lần cuối lúc {time} (tự thử lại mỗi phút).":
+        "The agent last tried to reach NC tool at {time} (it retries every minute).",
     "Cài agent cho máy này": "Install the agent on this machine",
     "Máy Windows 10/11": "Windows 10/11 PC",
     "trình duyệt này không chạy trên Windows": "this browser is not running on Windows",
@@ -48,8 +71,6 @@ EN = {
         "Next time, if the agent is off, the website starts it: the browser asks to open **L2M Ops Agent** → tick **Always allow** "
         "→ **Open**.",
     "Trình duyệt hỏi mở L2M Ops Agent": "The browser asking to open L2M Ops Agent",
-    "Đã thấy agent trên máy **{host}**, nhưng còn thiếu vài bước — bấm **Kiểm tra máy** ở thanh bên để xem.":
-        "Found the agent on **{host}**, but a few steps are missing — click **Check machine** in the sidebar to see them.",
     "Đã thấy agent trên máy **{host}**: máy đã đủ điều kiện chạy NC tool / MyTool.":
         "Found the agent on **{host}**: the machine is ready to run NC tool / MyTool.",
     "Đóng": "Close",
@@ -62,7 +83,6 @@ EN = {
         "NC tool / MyTool actions run on your own machine (they need the company VPN and your SSO sign-in) through a small agent. "
         "Install it once, about 3 minutes.",
     "▶ Bật agent": "▶ Start agent",
-    "Đang tìm agent…": "Looking for the agent…",
     "Máy {host} cần thêm vài bước": "{host} needs a few more steps",
     "Agent vừa tắt. Bấm **▶ Bật agent** (máy đã cài) hoặc mở lại agent.bat.":
         "The agent just stopped. Click **▶ Start agent** (if installed on this machine) or reopen agent.bat.",
@@ -79,7 +99,6 @@ EN = {
     "Thao tác NC tool / MyTool mở Edge để dùng phiên SSO của bạn. Cài Edge rồi bấm Kiểm tra lại.":
         "NC tool / MyTool actions open Edge to use your SSO sign-in. Install Edge, then click Check again.",
     "Tải Microsoft Edge": "Download Microsoft Edge",
-    "Agent đang kiểm tra lại máy…": "The agent is re-checking the machine…",
     "Để sau": "Later",
     # ---- ui/auth.py, ui/common.py -------------------------------------------------------
     "Kiểm tra máy": "Check machine",
@@ -91,4 +110,7 @@ EN = {
     "Cần chú ý: mất mạng / có bản mới": "Needs attention: offline / new version",
     # ---- automation/agent.py ------------------------------------------------------------
     "⚠ Không đăng ký được link để website bật agent: {error}": "⚠ Could not register the link the website uses to start the agent: {error}",
+    "✓ Vào được NC tool.": "✓ NC tool is reachable.",
+    "⚠ Chưa vào được NC tool — bật VPN công ty.": "⚠ NC tool is not reachable — turn on the company VPN.",
+    "Website yêu cầu kiểm tra lại máy.": "The website asked to re-check this machine.",
 }

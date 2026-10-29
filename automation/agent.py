@@ -278,11 +278,16 @@ class Heartbeat(threading.Thread):
 
     def _check_loop(self) -> None:
         """Tự kiểm tra máy ở luồng riêng (thử kết nối NC tool / MyTool mất vài giây), xong thì báo ngay.
-        Website bấm "Kiểm tra lại" -> kiểm tra ngay thay vì chờ hết phút."""
+        Website bấm "Kiểm tra lại" -> kiểm tra ngay thay vì chờ hết phút. NC tool đổi trạng thái thì ghi vào log."""
+        reach = None
         while not self.stopped.is_set():
             try:
-                self.checks = {**machine_checks(self.username), "at": f"{config.now():%Y-%m-%d %H:%M:%S}"}
+                checks = machine_checks(self.username)
+                self.checks = {**checks, "at": f"{config.now():%Y-%m-%d %H:%M:%S}"}
                 self.next_beat = 0.0
+                if checks.get("nc_tool") is not None and checks["nc_tool"] != reach:
+                    reach = checks["nc_tool"]
+                    say(t("✓ Vào được NC tool.") if reach else t("⚠ Chưa vào được NC tool — bật VPN công ty."))
             except Exception:  # noqa: BLE001 — mất mạng / CSDL: lần sau thử lại
                 pass
             self.recheck.wait(MACHINE_CHECK_SECONDS)
@@ -308,6 +313,7 @@ class Heartbeat(threading.Thread):
                         self.ui.set_connected(True)
                 controls = jobs.claim_controls(self.username, self.host)
                 if jobs.CHECK_MACHINE in controls:
+                    say(t("Website yêu cầu kiểm tra lại máy."))
                     self.recheck.set()
                 if jobs.SHOW_WINDOW in controls:
                     if self.ui:

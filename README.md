@@ -80,8 +80,10 @@ Thay cho việc lấy một máy làm server: website chạy trên **Streamlit C
 
 **Kiểm tra máy sau khi đăng nhập website** (`ui/agent_setup.py`; nút **Kiểm tra máy** ở thanh bên chạy lại bất cứ lúc nào). Website ở Mỹ không đọc được máy người dùng, nên agent tự kiểm tra máy mỗi phút (có Edge, vào được NC tool / MyTool — tức VPN đang bật, đã bật tự chạy cùng Windows, đã đăng ký link) rồi ghi vào CSDL (bảng `agents`, cột `checks`):
 - Agent đang chạy và máy ổn → báo "Máy … đã đủ điều kiện".
-- Agent chạy nhưng còn thiếu (VPN tắt, agent bản cũ, thiếu Edge) → hộp hướng dẫn sửa từng mục; **Kiểm tra lại** nhờ agent kiểm tra ngay (không chờ hết phút).
-- Tài khoản đã cài agent nhưng agent đang tắt → website tự mở link **`l2mops-agent://start`** (agent.bat đăng ký link này trong `HKCU\Software\Classes`, không cần admin). Trình duyệt hỏi *"This site is trying to open L2M Ops Agent"* → tick **Always allow** → **Open**; agent bật lên và báo về. Quá 25 giây không thấy → hộp hướng dẫn cài đặt.
+- Agent chạy nhưng còn thiếu (VPN tắt, agent bản cũ, thiếu Edge) → hộp hướng dẫn sửa từng mục (kèm giờ agent thử kết nối NC tool lần cuối); **Kiểm tra lại** gửi lệnh cho agent ngay lúc bấm, hộp hiện dòng "đang chờ agent trả lời" rồi ghi rõ agent đã kiểm tra lúc nào (hoặc agent không trả lời sau 20 giây).
+- Tài khoản đã cài agent (bản có link) nhưng agent đang tắt → website tự mở link **`l2mops-agent://start`** (agent.bat đăng ký link này trong `HKCU\Software\Classes`, không cần admin). Trình duyệt hỏi *"This site is trying to open L2M Ops Agent"* → tick **Always allow** → **Open**; agent bật lên và báo về. Trình duyệt không hỏi (có trình duyệt chặn tự mở khi chưa bấm gì) → bấm nút **▶ Bật agent** hiện ở thanh bên. Quá 25 giây không thấy → hộp hướng dẫn cài đặt.
+- Agent bản cũ (trước khi có link, website biết qua cột `checks` không có `protocol`) đang tắt → mở ngay hộp hướng dẫn tải bản mới, không thử bật.
+- Hộp thoại đang mở được vẽ lại ở mọi lượt chạy của trang (vd bật VPN làm mất kết nối rồi nối lại) cho tới khi người dùng bấm Đóng / Để sau / dấu X. Agent ghi vào log khi NC tool đổi trạng thái (vào được / chưa vào được) và khi website yêu cầu kiểm tra lại.
 - Chưa có agent → hộp **hướng dẫn cài đặt bằng hình** (7 bước, vẽ bằng SVG trong `ui/guide_art.py`, có tên tài khoản và địa chỉ website của người xem) + nút tải agent + nút **▶ Bật agent**.
 - Mở website trên máy không phải Windows → chỉ báo một dòng (xem/sửa dữ liệu bình thường).
 
@@ -167,7 +169,7 @@ Chọn ở ô **🌐 Language** trên cùng thanh bên trái, kể cả ở tran
 - `tests/test_i18n.py`: mọi chữ hiển thị đều có bản dịch tiếng Anh, chỗ `{}` khớp nhau, không dịch trùng lệch.
 - `tests/test_jobs.py`: hàng đợi website → agent (chỉ chạy lệnh của đúng người, một máy nhận, hết hạn, huỷ giữa chừng, chuyển file kết quả, lệnh "hiện cửa sổ"); với CSDL chung: website chờ agent và hiện log, nút Hiện cửa sổ agent, và một lượt thật qua Edge ẩn.
 - `tests/test_agent_background.py` (CSDL chung, Windows): agent chạy ngầm thật — sẵn sàng, chỉ một bản, chạy lệnh, mở cửa sổ log từ website và từ khay, bật/tắt tự chạy cùng Windows, báo bản mới, `--stop`; luồng `agent.bat` (lần đầu, mở lại khi đang chạy, tự tắt bản cũ khi có code mới); link `…://start` / `…://show` bật agent và hiện cửa sổ (dùng một tên link thử, xoá khi xong).
-- `tests/test_jobs.py` phần kiểm tra máy sau đăng nhập: máy đủ điều kiện, thiếu VPN (+ Kiểm tra lại), người mới (hộp 7 hình + nút tải), agent đã cài nhưng tắt (website bấm link rồi chờ).
+- `tests/test_jobs.py` phần kiểm tra máy sau đăng nhập: máy đủ điều kiện, thiếu VPN (hộp không mất khi trang chạy lại; Kiểm tra lại gửi lệnh, hiện giờ kiểm tra; Đóng thì không mở lại), agent bản cũ đang tắt (hướng dẫn tải bản mới), người mới (hộp 7 hình + nút tải; cài xong Kiểm tra lại thấy agent), agent đã cài nhưng tắt (website bấm link rồi chờ).
 - Chế độ team đã chạy thử trên trình duyệt ở `localhost`. **Chưa thử truy cập từ máy khác trong LAN** (cần máy thứ hai và tường lửa cho phép).
 - **Chưa chạy trên tool thật** (NC Billing Admin, MyTool). Cần đăng nhập rồi Calibrate. Lần đầu nên chạy chế độ "tôi tự bấm Register" và đối chiếu kỹ.
 - Định dạng ngày trên MyTool đang giả định `DD/MM/YYYY`. Nếu MyTool hiển thị `MM/DD`, cần chỉnh lại `core/webshop_audit.py`.
