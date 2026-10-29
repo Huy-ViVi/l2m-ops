@@ -90,8 +90,12 @@ EN = {
         "The agent just stopped. Click **▶ Start agent** (if installed on this machine) or reopen agent.bat.",
     "Agent đang chạy trên máy **{host}**, nhưng còn thiếu:": "The agent is running on **{host}**, but something is missing:",
     "Agent đang chạy bản cũ": "The agent is an old version",
-    "Tải agent bản mới, giải nén đè lên thư mục agent cũ rồi mở lại agent.bat (agent cũ tự tắt).":
-        "Download the new agent, unzip it over the old agent folder and reopen agent.bat (the old agent stops by itself).",
+    "Agent cài từ ngày 29/10/2026 trở đi tự tải bản mới và khởi động lại trong vài phút (khi không chạy "
+    "lệnh) — hộp này tự cập nhật. Bản cài trước đó: tải agent bản mới, giải nén đè lên thư mục agent cũ "
+    "rồi mở lại agent.bat một lần.":
+        "Agents installed from 29/10/2026 on download the new version and restart within a few minutes (when no job is "
+        "running) — this box updates by itself. Older installs: download the new agent, unzip it over the old agent folder "
+        "and reopen agent.bat once.",
     "Chưa vào được NC tool": "NC tool is not reachable",
     "Bật VPN công ty trên máy {host}. Agent tự thử lại mỗi 10 giây: vào được NC tool là hộp này tự chuyển "
     "sang đủ điều kiện, không cần bấm gì. Nếu VPN đã bật mà vẫn báo: kiểm tra địa chỉ NC tool ở trang Cài "
@@ -114,10 +118,12 @@ EN = {
         "Check whether your machine is ready to run NC tool / MyTool; anything missing comes with instructions.",
     "Hướng dẫn cài agent": "Agent install guide",
     "Theo team ({browser})": "Team default ({browser})",
-    "Trình duyệt mở NC tool / MyTool trên máy của bạn (chỉ áp dụng cho tài khoản của bạn). Đổi trình duyệt "
-    "thì đăng nhập SSO lại một lần trong trình duyệt mới.":
-        "The browser that opens NC tool / MyTool on your machine (applies to your account only). After switching, sign in "
-        "to SSO once in the new browser.",
+    "Trình duyệt mở NC tool / MyTool trên máy của bạn (chỉ áp dụng cho tài khoản của bạn). Lần đầu app tự "
+    "chọn theo trình duyệt bạn đang mở website (Edge / Chrome). Đổi trình duyệt thì đăng nhập SSO lại một "
+    "lần trong trình duyệt mới.":
+        "The browser that opens NC tool / MyTool on your machine (applies to your account only). The first time, the app "
+        "picks the browser you are using to open this website (Edge / Chrome). After switching, sign in to SSO once in the "
+        "new browser.",
     # ---- ui/guide_art.py ---------------------------------------------------------------
     "Đang chạy lệnh": "Running a job",
     "Cần chú ý: mất mạng / có bản mới": "Needs attention: offline / new version",

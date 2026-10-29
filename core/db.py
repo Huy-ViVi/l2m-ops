@@ -116,6 +116,15 @@ def _db_schema() -> str | None:
     return name or None
 
 
+def pooled_url(url: str) -> str:
+    """Pooler của Supabase: dùng cổng 6543 (chế độ transaction) thay cho 5432 (chế độ session).
+    Chế độ session giữ riêng một kết nối máy chủ cho mỗi kết nối của ứng dụng, cả team (website + agent của từng người +
+    tiến trình chạy lệnh của agent) chỉ được 15 -> hết chỗ thì báo EMAXCONNSESSION / PoolTimeout. Chế độ transaction chỉ
+    mượn kết nối máy chủ trong lúc chạy một giao dịch, nhận tới ~200 kết nối. Địa chỉ đã lưu (secrets, data/local.json,
+    zip agent) giữ nguyên cổng 5432, đổi ở đây."""
+    return re.sub(r"(@[^/@?]+\.pooler\.supabase\.com):5432(?=/|\?|$)", r"\1:6543", url)
+
+
 def _configure(conn) -> None:
     name = _db_schema()
     if name:
@@ -123,7 +132,6 @@ def _configure(conn) -> None:
             conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{name}"')
         except psycopg.errors.UniqueViolation:  # hai kết nối của pool cùng tạo schema một lúc
             conn.rollback()
-        conn.execute(f'SET search_path TO "{name}"')
         conn.commit()
 
 
@@ -136,8 +144,8 @@ def _pool(url: str) -> "ConnectionPool":
     with _pool_lock:
         pool = _pools.get(key)
         if pool is None:
-            # prepare_threshold=None: chạy được qua pooler của Supabase (chế độ transaction lẫn session).
-            pool = ConnectionPool(url, min_size=1, max_size=4, max_idle=300, timeout=30, open=True,
+            # prepare_threshold=None: chạy được qua pooler của Supabase ở chế độ transaction.
+            pool = ConnectionPool(pooled_url(url), min_size=1, max_size=4, max_idle=300, timeout=30, open=True,
                                   check=ConnectionPool.check_connection, configure=_configure,
                                   kwargs={"prepare_threshold": None, "row_factory": _row_factory, "connect_timeout": 15})
             _pools[key] = pool
@@ -150,6 +158,9 @@ def connect():
     url = config.database_url()
     if url:
         with _pool(url).connection() as conn:  # pool tự commit / rollback
+            name = _db_schema()
+            if name:  # SET LOCAL: chỉ trong giao dịch này — kết nối máy chủ của pooler dùng chung, SET thường sẽ lọt sang người khác
+                conn.execute(f'SET LOCAL search_path TO "{name}"')
             yield _PgConn(conn)
         return
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -199,7 +210,7 @@ def test_connection(url: str) -> tuple[bool, str]:
     if not re.match(r"^postgres(ql)?://", url or ""):
         return False, t("Địa chỉ phải bắt đầu bằng postgresql://")
     try:
-        with psycopg.connect(url, connect_timeout=10, prepare_threshold=None) as conn:
+        with psycopg.connect(pooled_url(url), connect_timeout=10, prepare_threshold=None) as conn:
             version = conn.execute("SHOW server_version").fetchone()[0]
         return True, t("Kết nối được (Postgres {version}).", version=version)
     except Exception as e:  # noqa: BLE001 — lỗi mạng / sai mật khẩu đều báo lên UI

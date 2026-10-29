@@ -10,10 +10,12 @@ EN = {
         "sends them to your machine. First time: click **⬇ Download agent for this machine**, unzip it, double-click **agent.bat** "
         "(it installs everything and already has your account) and turn on the VPN. The agent runs in the background (a dot in "
         "the system tray) and starts with Windows. Reload this page after a few seconds.",
-    "🟠 Agent đang chạy bản code khác website: tải agent bản mới, giải nén đè lên thư mục agent cũ "
-    "rồi mở lại agent.bat.":
-        "🟠 The agent runs a different code version than the website: download the new agent, unzip it over the old agent folder "
-        "and reopen agent.bat.",
+    "🟠 Agent đang chạy bản code khác website. Agent cài từ ngày 29/10/2026 trở đi tự cập nhật trong "
+    "vài phút; bản cài trước đó: tải agent bản mới, giải nén đè lên thư mục agent cũ rồi mở lại "
+    "agent.bat (một lần, từ đó tự cập nhật).":
+        "🟠 The agent runs a different code version than the website. Agents installed from 29/10/2026 on update themselves "
+        "within a few minutes; older installs: download the new agent, unzip it over the old agent folder and reopen agent.bat "
+        "(once — after that it updates itself).",
     "⬇ Tải agent cho máy này": "⬇ Download agent for this machine",
     "Giải nén rồi nháy đúp agent.bat: lần đầu tự cài Python + thư viện; đã có sẵn địa chỉ CSDL chung "
     "và tài khoản của bạn. Không gửi file này cho người khác.":
@@ -91,6 +93,22 @@ EN = {
         "The website has a new code version ({version}). Download the new agent from the website sidebar, unzip it over "
         "this folder and reopen agent.bat.",
     "Có bản agent mới": "New agent version",
+    # ---- tự cập nhật (automation/agent.py, automation/updater.py) ------------------------------
+    "Website đã có bản code mới ({version}) — agent sẽ tự cập nhật khi không chạy lệnh.":
+        "The website has a new code version ({version}) — the agent will update itself when no job is running.",
+    "Thư mục agent đã có bản code {version} — khởi động lại agent để dùng.":
+        "The agent folder already has code version {version} — restarting the agent to use it.",
+    "Đang tải bản code {version} từ GitHub để tự cập nhật…": "Downloading code version {version} from GitHub to update…",
+    "Code trên GitHub chưa khớp bản website ({version}) — website có thể chưa cập nhật xong; thử lại sau ít phút.":
+        "The code on GitHub does not match the website version ({version}) yet — the website may still be updating; "
+        "retrying in a few minutes.",
+    "chép code mới chưa trọn vẹn": "the new code was not copied completely",
+    "⚠ Chưa tự cập nhật được: {error} — thử lại sau ít phút (hoặc tải agent bản mới trên website).":
+        "⚠ Could not update automatically: {error} — retrying in a few minutes (or download the new agent from the website).",
+    "✓ Đã chép bản code {version} — khởi động lại agent…": "✓ Copied code version {version} — restarting the agent…",
+    "✓ Agent đã tự cập nhật lên bản {version}.": "✓ The agent updated itself to version {version}.",
+    "Agent đã tự cập nhật lên bản mới của website ({version}).":
+        "The agent updated itself to the website's new version ({version}).",
     "Mở website, bấm ⬇ Tải agent cho máy này ở thanh bên trái, giải nén đè lên "
     "thư mục agent rồi mở lại agent.bat.":
         "Open the website, click ⬇ Download agent for this machine in the sidebar, unzip it over "

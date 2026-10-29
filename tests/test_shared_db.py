@@ -45,6 +45,23 @@ def test_mode_and_schema():
     assert len(rows) >= 40 and any(r["item_id"] == 79 for r in rows), "bảng Item ID có sẵn phải được nạp"
 
 
+def test_transaction_pooler():
+    """Pooler Supabase: dùng cổng 6543 (transaction, ~200 kết nối) thay 5432 (session, cả team chỉ 15 — hết chỗ là lỗi
+    EMAXCONNSESSION). Schema test đặt bằng SET LOCAL nên không lọt sang kết nối máy chủ dùng chung."""
+    import psycopg
+
+    pooler = "postgresql://postgres.abc:pw@aws-0-ap-northeast-2.pooler.supabase.com"
+    assert db.pooled_url(pooler + ":5432/postgres") == pooler + ":6543/postgres"
+    assert db.pooled_url(pooler + ":6543/postgres") == pooler + ":6543/postgres"
+    assert db.pooled_url("postgresql://u:pw@db.example.com:5432/app") == "postgresql://u:pw@db.example.com:5432/app"
+    for _ in range(3):
+        with store.connect() as c:
+            assert c.execute("SELECT current_schema()").fetchone()[0] == SCHEMA
+    with psycopg.connect(db.pooled_url(URL), prepare_threshold=None, autocommit=True) as plain:
+        for _ in range(5):
+            assert plain.execute("SELECT current_schema()").fetchone()[0] == "public", "schema test lọt sang kết nối khác"
+
+
 def test_users_sessions():
     store.create_user("Huy", "Huy", "password-123", "admin", by="test")
     try:
@@ -122,8 +139,8 @@ def test_cache_sees_other_machines():
     store.CACHE_TTL = 60  # đủ dài để lượt đọc thứ hai chắc chắn còn trong cache, dù mạng tới CSDL chậm
     try:
         before = store.list_activities(include_deleted=True, game="l2m")
-        with psycopg.connect(URL, prepare_threshold=None) as other:
-            other.execute(f'SET search_path TO "{SCHEMA}"')
+        with psycopg.connect(db.pooled_url(URL), prepare_threshold=None) as other:
+            other.execute(f'SET LOCAL search_path TO "{SCHEMA}"')
             other.execute("INSERT INTO activities(kind, title, status, summary, created_by, created_at, updated_by, updated_at, game) "
                           "VALUES ('nc_setup', 'from other machine', 'done', '{}', 'bob', '2026-10-27 10:00:00', 'bob', '2026-10-27 10:00:00', 'l2m')")
         assert len(store.list_activities(include_deleted=True, game="l2m")) == len(before)  # còn trong cache
@@ -186,7 +203,7 @@ def _drop(schema: str) -> None:
     import psycopg
 
     db.close_all()
-    with psycopg.connect(URL, prepare_threshold=None, autocommit=True) as conn:
+    with psycopg.connect(db.pooled_url(URL), prepare_threshold=None, autocommit=True) as conn:
         conn.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
 
 

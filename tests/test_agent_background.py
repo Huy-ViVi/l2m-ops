@@ -179,7 +179,7 @@ def _cleanup() -> None:
     except OSError:
         pass
     db.close_all()
-    with psycopg.connect(URL, prepare_threshold=None, autocommit=True) as conn:
+    with psycopg.connect(db.pooled_url(URL), prepare_threshold=None, autocommit=True) as conn:
         conn.execute(f'DROP SCHEMA IF EXISTS "{SCHEMA}" CASCADE')
 
 

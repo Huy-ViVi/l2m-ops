@@ -423,7 +423,9 @@ def _fix_body() -> None:
     if "outdated" in issues:
         with st.container(border=True):
             st.markdown(":material/update: **" + t("Agent đang chạy bản cũ") + "**  \n" +
-                        t("Tải agent bản mới, giải nén đè lên thư mục agent cũ rồi mở lại agent.bat (agent cũ tự tắt)."))
+                        t("Agent cài từ ngày 29/10/2026 trở đi tự tải bản mới và khởi động lại trong vài phút (khi không chạy "
+                          "lệnh) — hộp này tự cập nhật. Bản cài trước đó: tải agent bản mới, giải nén đè lên thư mục agent cũ "
+                          "rồi mở lại agent.bat một lần."))
             auth.agent_download_button("agent_zip_fix", primary=True)
     if "vpn" in issues:
         with st.container(border=True):

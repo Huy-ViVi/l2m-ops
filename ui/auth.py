@@ -1,6 +1,7 @@
 """Đăng nhập và phân quyền. Chế độ local: không cần đăng nhập (một người dùng 'local' quyền admin)."""
 from __future__ import annotations
 
+import re
 import time
 from urllib.parse import urlsplit
 
@@ -39,8 +40,28 @@ def is_admin() -> bool:
 
 
 def own_browser() -> str:
-    """Trình duyệt người đang đăng nhập tự chọn ('' = theo mặc định của team ở trang Cài đặt)."""
+    """Trình duyệt người đang đăng nhập đã chọn (kênh, config.TEAM_BROWSER, hoặc '' = chưa chọn -> theo mặc định của team)."""
     return (user() or {}).get("browser") or ""
+
+
+def channel_from_user_agent(ua: str) -> str:
+    """Kênh Playwright của trình duyệt đang mở website: Edge / Chrome trên Windows; '' nếu không nhận ra.
+    Máy khác Windows (Mac, điện thoại) không nói lên trình duyệt trên máy chạy agent. Cốc Cốc, Opera, ứng dụng Electron…
+    cũng ghi "Chrome/" trong User-Agent nhưng không phải Chrome."""
+    if "Windows" not in ua:
+        return ""
+    if "Edg/" in ua:
+        return "msedge"
+    if "Chrome/" in ua and not re.search(r"OPR/|coc_coc|CocCoc|YaBrowser|Vivaldi|SamsungBrowser|Electron/", ua):
+        return "chrome"
+    return ""
+
+
+def browser_in_use() -> str:
+    try:
+        return channel_from_user_agent(st.context.headers.get("User-Agent", "") or "")
+    except Exception:  # noqa: BLE001 — không đọc được header (vd chạy test)
+        return ""
 
 
 def can_edit(record: dict) -> bool:
@@ -105,24 +126,35 @@ def agent_download_button(key: str, primary: bool = False) -> None:
                               "và tài khoản của bạn. Không gửi file này cho người khác."))
 
 
-def _pick_browser() -> None:
+def _save_browser(channel: str) -> None:
     from ui import agent_setup  # agent_setup import module này
 
-    store.set_browser(username(), st.session_state["own_browser"])
+    store.set_browser(username(), channel)
     st.session_state["auth_user"] = store.get_user(username())
-    agent_setup.browser_changed()
+    agent_setup.browser_changed()  # agent kiểm tra lại máy với trình duyệt mới
+
+
+def _pick_browser() -> None:
+    _save_browser(st.session_state["own_browser"] or config.TEAM_BROWSER)
 
 
 def _browser_picker(u: dict) -> None:
-    """Mỗi người tự chọn trình duyệt mở NC tool / MyTool trên máy mình; không chọn thì theo mặc định của team."""
+    """Mỗi người chọn trình duyệt mở NC tool / MyTool trên máy mình. Chưa chọn lần nào: lấy luôn trình duyệt đang mở
+    website (Edge / Chrome); không nhận ra thì theo mặc định của team."""
+    own = u.get("browser") or ""
+    seen = "" if own else browser_in_use()
+    if seen:
+        _save_browser(seen)
+        st.session_state.pop("own_browser", None)  # ô chọn hiện đúng giá trị vừa lưu
+        own = seen
     team = config.browser_channel(config.load_settings())
     options = ["", *config.BROWSERS]
-    own = u.get("browser") or ""
     st.selectbox(t("Trình duyệt"), options, index=options.index(own) if own in options else 0, key="own_browser",
                  on_change=_pick_browser,
                  format_func=lambda c: config.BROWSERS[c] if c else t("Theo team ({browser})", browser=config.BROWSERS.get(team, team)),
-                 help=t("Trình duyệt mở NC tool / MyTool trên máy của bạn (chỉ áp dụng cho tài khoản của bạn). Đổi trình duyệt "
-                        "thì đăng nhập SSO lại một lần trong trình duyệt mới."))
+                 help=t("Trình duyệt mở NC tool / MyTool trên máy của bạn (chỉ áp dụng cho tài khoản của bạn). Lần đầu app tự "
+                        "chọn theo trình duyệt bạn đang mở website (Edge / Chrome). Đổi trình duyệt thì đăng nhập SSO lại một "
+                        "lần trong trình duyệt mới."))
 
 
 COOKIE = "l2m_sid"
@@ -231,8 +263,9 @@ def sidebar_user() -> None:
                                   "Mỗi người dùng tài khoản riêng, nếu không lệnh sẽ chạy trên máy người khác."))
                 outdated = bool(agent) and agent.get("version") != bundle.code_version()
                 if outdated:
-                    st.caption(t("🟠 Agent đang chạy bản code khác website: tải agent bản mới, giải nén đè lên thư mục agent cũ "
-                                 "rồi mở lại agent.bat."))
+                    st.caption(t("🟠 Agent đang chạy bản code khác website. Agent cài từ ngày 29/10/2026 trở đi tự cập nhật trong "
+                                 "vài phút; bản cài trước đó: tải agent bản mới, giải nén đè lên thư mục agent cũ rồi mở lại "
+                                 "agent.bat (một lần, từ đó tự cập nhật)."))
                 if not agent or outdated:
                     agent_download_button("agent_zip_sidebar")
                 elif st.button(t("Hiện cửa sổ agent"), key="agent_show", icon=":material/open_in_new:",

@@ -35,6 +35,7 @@ MASTER_DIR = DATA_DIR / "master"
 WORK_DIR = DATA_DIR / "work"
 BROWSER_PROFILE_DIR = DATA_DIR / "browser-profile"
 BROWSERS = {"msedge": "Microsoft Edge", "chrome": "Google Chrome", "chromium": "Chromium (Playwright)"}  # kênh Playwright
+TEAM_BROWSER = "team"  # người dùng chọn hẳn "Theo team" (khác '' = chưa chọn: website lấy theo trình duyệt đang mở nó)
 
 MARKETS = ["SG", "ID", "PH", "MY", "TH", "VN"]
 DEFAULT_GAME = "l2m"

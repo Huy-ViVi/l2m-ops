@@ -169,7 +169,7 @@ def test_agent_zip_has_code_and_settings():
     assert not [n for n in names if n.startswith("data/") and n != "data/local.json"], names  # không kèm dữ liệu của máy tải
     assert not [n for n in names if n.startswith(("tests/", ".streamlit/")) or "__pycache__" in n], names
     local = json.loads((dest / "data" / "local.json").read_text(encoding="utf-8"))
-    assert local == {"database_url": "postgresql://u:pw@db.example/x", "agent_user": "alice"}
+    assert local == {"database_url": "postgresql://u:pw@db.example/x", "agent_user": "alice", "auto_update": True}
     assert bundle.code_version(dest) == bundle.code_version(ROOT)  # website nhận ra agent tải từ nó là cùng bản
 
 
@@ -390,9 +390,47 @@ def test_website_own_browser():
     at.run()  # cài Chrome xong: hộp tự chuyển
     assert "có Google Chrome" in _texts(at), _texts(at)
     assert config.browser_channel(config.load_settings(), store.user_browser("br1")) == "chrome"
-    store.set_browser("br1", "")
-    assert config.browser_channel(config.load_settings(), store.user_browser("br1")) == "msedge"  # bỏ chọn: theo team
+    at.selectbox(key="own_browser").set_value("").run()  # chọn hẳn "Theo team"
+    assert store.user_browser("br1") == config.TEAM_BROWSER
+    assert config.browser_channel(config.load_settings(), store.user_browser("br1")) == "msedge"
     jobs.agent_offline("br1")
+
+
+def test_browser_from_user_agent():
+    from ui import auth
+
+    win = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    assert auth.channel_from_user_agent(win + "Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0") == "msedge"
+    assert auth.channel_from_user_agent(win + "Chrome/141.0.0.0 Safari/537.36") == "chrome"
+    assert auth.channel_from_user_agent(win + "coc_coc_browser/141.0.0 Chrome/135.0.0.0 Safari/537.36") == ""  # Cốc Cốc
+    assert auth.channel_from_user_agent(win + "Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0") == ""  # Opera
+    assert auth.channel_from_user_agent(win + "Chrome/138.0.0.0 Electron/37.0.0 Safari/537.36") == ""  # ứng dụng Electron
+    assert auth.channel_from_user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0") == ""
+    assert auth.channel_from_user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                        "Chrome/141.0.0.0 Safari/537.36") == ""  # agent chỉ chạy trên Windows
+
+
+def test_website_browser_defaults_to_one_in_use():
+    """Chưa chọn trình duyệt lần nào -> lấy luôn trình duyệt đang mở website, agent kiểm tra lại máy với trình duyệt đó.
+    Đã chọn (kể cả "Theo team") thì không tự đổi nữa."""
+    from core import bundle
+    from ui import auth
+
+    _website_env()
+    jobs.heartbeat("br2", "pc-br2", bundle.code_version(), {**GOOD, "browser": "msedge", "browser_ok": True})
+    original = auth.browser_in_use
+    auth.browser_in_use = lambda: "chrome"  # vd myly mở website bằng Chrome
+    try:
+        at = _after_login("br2")
+        assert store.user_browser("br2") == "chrome" and at.selectbox(key="own_browser").value == "chrome"
+        assert jobs.CHECK_MACHINE in jobs.claim_controls("br2", "pc-br2")
+        assert at.session_state["machine_check"] == "browser"  # chờ agent kiểm tra Chrome rồi mới báo
+        store.set_browser("br2", config.TEAM_BROWSER)
+        at = _after_login("br2")
+        assert store.user_browser("br2") == config.TEAM_BROWSER, "đã chọn Theo team thì không tự đổi"
+    finally:
+        auth.browser_in_use = original
+        jobs.agent_offline("br2")
 
 
 def test_website_check_machine_starts_installed_agent():
@@ -470,7 +508,7 @@ def _drop() -> None:
     import psycopg
 
     db.close_all()
-    with psycopg.connect(URL, prepare_threshold=None, autocommit=True) as conn:
+    with psycopg.connect(db.pooled_url(URL), prepare_threshold=None, autocommit=True) as conn:
         conn.execute(f'DROP SCHEMA IF EXISTS "{SCHEMA}" CASCADE')
 
 

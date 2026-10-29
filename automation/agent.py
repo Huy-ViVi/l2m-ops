@@ -401,8 +401,9 @@ def run_job(row: dict, runner: str = RUNNER, stop: threading.Event | None = None
 
 
 def serve(username: str, host: str, runner: str = RUNNER, once: bool = False, stop: threading.Event | None = None,
-          ui: "AgentTray | None" = None) -> None:
-    """Vòng chính: nhận lệnh của username, chạy lần lượt từng lệnh. once=True: chạy tối đa một lệnh rồi dừng (test)."""
+          ui: "AgentTray | None" = None, idle=None) -> bool:
+    """Vòng chính: nhận lệnh của username, chạy lần lượt từng lệnh. once=True: chạy tối đa một lệnh rồi dừng (test).
+    idle(): gọi lúc không có lệnh; trả về True thì dừng nhận lệnh (vd vừa tự cập nhật, cần khởi động lại) -> serve trả True."""
     beat = Heartbeat(username, host, ui)
     beat.start()
     if ui:
@@ -420,7 +421,9 @@ def serve(username: str, host: str, runner: str = RUNNER, once: bool = False, st
                 continue
             if not row:
                 if once:
-                    return
+                    return False
+                if idle and idle():
+                    return True
                 (stop.wait if stop else time.sleep)(POLL_SECONDS)
                 continue
             say(t("▶ Lệnh #{id}: {job}", id=row["id"], job=row["job"]))
@@ -442,7 +445,8 @@ def serve(username: str, host: str, runner: str = RUNNER, once: bool = False, st
             if ui:
                 ui.set_busy("")
             if once:
-                return
+                return False
+        return False
     finally:
         beat.stop()
         try:
@@ -508,12 +512,17 @@ class AgentTray:
             self._refresh()
 
     def site_version(self, version: str) -> None:
+        from automation import updater
+
         newer = version if version and version != bundle.code_version() else ""
         if newer and newer != self.update:
-            say(t("Website đã có bản code mới ({version}). Tải agent bản mới ở thanh bên trái website, giải nén đè lên thư mục "
-                  "này rồi mở lại agent.bat.", version=newer))
-            self.tray.notify(t("Có bản agent mới"), t("Mở website, bấm ⬇ Tải agent cho máy này ở thanh bên trái, giải nén đè lên "
-                                                       "thư mục agent rồi mở lại agent.bat."))
+            if updater.enabled():  # serve() gọi _auto_update lúc rảnh
+                say(t("Website đã có bản code mới ({version}) — agent sẽ tự cập nhật khi không chạy lệnh.", version=newer))
+            else:
+                say(t("Website đã có bản code mới ({version}). Tải agent bản mới ở thanh bên trái website, giải nén đè lên thư "
+                      "mục này rồi mở lại agent.bat.", version=newer))
+                self.tray.notify(t("Có bản agent mới"), t("Mở website, bấm ⬇ Tải agent cho máy này ở thanh bên trái, giải nén đè "
+                                                           "lên thư mục agent rồi mở lại agent.bat."))
         if newer != self.update:
             self.update = newer
             self._refresh()
@@ -610,6 +619,56 @@ def _wait_login(ui: AgentTray, stop: threading.Event) -> str | None:
     return None
 
 
+DISK_CHECK_SECONDS = 30
+UPDATE_RETRY_SECONDS = 300
+_disk_checked: dict[str, float] = {}
+_update_tried: dict[str, float] = {}
+
+
+def _due(seen: dict[str, float], key: str, seconds: float) -> bool:
+    if time.monotonic() - seen.get(key, -seconds) < seconds:
+        return False
+    seen[key] = time.monotonic()
+    return True
+
+
+def _auto_update(target: str) -> bool:
+    """Website đang chạy bản target khác bản này: True nếu thư mục agent đã có code của bản target (vừa tự tải từ GitHub —
+    automation/updater.py — hoặc đã có sẵn, vd thư mục code đang phát triển) -> cần khởi động lại. Lỗi / GitHub chưa có
+    đúng bản đó: thử lại sau UPDATE_RETRY_SECONDS. Gọi mỗi lần rảnh (2 giây/lần) nên tự giãn nhịp."""
+    from automation import updater
+
+    if not target or target == bundle.code_version() or not _due(_disk_checked, target, DISK_CHECK_SECONDS):
+        return False
+    if bundle.version_of(config.APP_ROOT) == target:
+        say(t("Thư mục agent đã có bản code {version} — khởi động lại agent để dùng.", version=target))
+        return True
+    if not updater.enabled() or not _due(_update_tried, target, UPDATE_RETRY_SECONDS):
+        return False
+    say(t("Đang tải bản code {version} từ GitHub để tự cập nhật…", version=target))
+    try:
+        root = updater.fetch(target)
+        if not root:
+            say(t("Code trên GitHub chưa khớp bản website ({version}) — website có thể chưa cập nhật xong; thử lại sau ít phút.",
+                  version=target))
+            return False
+        updater.apply(root)
+        if bundle.version_of(config.APP_ROOT) != target:  # chép chưa trọn (file bị khoá…): không khởi động lại vòng vòng
+            raise RuntimeError(t("chép code mới chưa trọn vẹn"))
+    except Exception as e:  # noqa: BLE001 — mất mạng / chặn GitHub: vẫn chạy bản cũ, thử lại sau
+        say(t("⚠ Chưa tự cập nhật được: {error} — thử lại sau ít phút (hoặc tải agent bản mới trên website).", error=_short(e)))
+        return False
+    say(t("✓ Đã chép bản code {version} — khởi động lại agent…", version=target))
+    return True
+
+
+def _restart_updated(version: str) -> None:
+    from automation import updater
+
+    _set_state(state="updating", version=version)
+    updater.relaunch(version, _python(windowless=True), AGENT_PY)
+
+
 def background(show: bool = False, announce: bool = False) -> int:
     """Agent chạy ngầm (pythonw, do agent.bat, Windows hoặc link từ website bật lên).
     show: mở cửa sổ log khi sẵn sàng. announce: hiện thông báo chỗ biểu tượng (khi người dùng vừa chủ động bật)."""
@@ -639,12 +698,25 @@ def background(show: bool = False, announce: bool = False) -> int:
             ensure_protocol()  # máy cài từ bản cũ / thư mục agent vừa chuyển chỗ: website vẫn bật được agent
         except OSError as e:
             say(t("⚠ Không đăng ký được link để website bật agent: {error}", error=_short(e)))
+        try:
+            site = jobs.site_version()
+        except Exception:  # noqa: BLE001
+            site = ""
+        if _auto_update(site):  # vừa bật mà đã là bản cũ: cập nhật trước khi nhận lệnh
+            _restart_updated(site)
+            return 0
         _set_state(state="ready", user=username)
-        if announce or os.environ.get("L2M_AGENT_TOKEN"):  # người dùng vừa bật (không phải lúc mở máy): chỉ chỗ biểu tượng
+        updated = os.environ.pop("L2M_AGENT_UPDATED", "")
+        if updated == bundle.code_version():
+            say(t("✓ Agent đã tự cập nhật lên bản {version}.", version=updated))
+            ui.notify("L2M Ops Agent", t("Agent đã tự cập nhật lên bản mới của website ({version}).", version=updated))
+        elif announce or os.environ.get("L2M_AGENT_TOKEN"):  # người dùng vừa bật (không phải lúc mở máy): chỉ chỗ biểu tượng
             ui.notify("L2M Ops Agent", t("Agent đang chạy ngầm. Bấm vào chấm tròn này để xem cửa sổ log; chuột phải để tắt."))
         if show:
             ui.show()
-        serve(username, host, stop=stop, ui=ui)
+        if serve(username, host, stop=stop, ui=ui, idle=lambda: _auto_update(ui.update)):
+            _restart_updated(ui.update)
+            return 0
         say(t("Đã tắt agent."))
         return 0
     except Exception as e:  # noqa: BLE001
@@ -652,7 +724,7 @@ def background(show: bool = False, announce: bool = False) -> int:
         _set_state(state="error", error=_short(e))
         return 1
     finally:
-        if _state.get("state") != "error":
+        if _state.get("state") not in ("error", "updating"):
             _set_state(state="stopped")
         ui.close()
         lock.release()

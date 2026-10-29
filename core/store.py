@@ -322,8 +322,9 @@ def update_user(username: str, by: str, role: str | None = None, active: bool | 
 
 
 def set_browser(username: str, channel: str) -> None:
-    """Trình duyệt người dùng tự chọn cho NC tool / MyTool ('' = theo mặc định của team)."""
-    if channel and channel not in config.BROWSERS:
+    """Trình duyệt người dùng chọn cho NC tool / MyTool: kênh trong config.BROWSERS, config.TEAM_BROWSER (theo mặc định
+    của team) hoặc '' (chưa chọn)."""
+    if channel and channel not in config.BROWSERS and channel != config.TEAM_BROWSER:
         raise ValueError(channel)
     with connect() as c:
         c.execute("UPDATE users SET browser = ? WHERE username = ?", (channel, username))
