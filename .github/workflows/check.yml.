@@ -1,0 +1,32 @@
+# Kiểm tra tự động sau mỗi lần đẩy code lên GitHub: plugin đúng quy định (PLUGIN_GUIDE.md) + test phần lõi.
+# Báo đỏ ở tab Actions thì sửa ngay — website vẫn tự cập nhật theo code mới dù kiểm tra đỏ.
+name: Kiểm tra code
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Cài thư viện
+        run: pip install -r requirements.txt
+      - name: Kiểm tra plugin theo quy định
+        run: python tools/check_plugins.py
+      - name: Test nền tảng plugin
+        run: python tests/test_plugins.py
+      - name: Test phần lõi
+        run: |
+          python tests/test_core.py
+          python tests/test_i18n.py
+          python tests/test_team.py
