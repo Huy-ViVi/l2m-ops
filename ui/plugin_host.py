@@ -62,7 +62,8 @@ def _page(p: plugins.Plugin, page: plugins.Page):
 
 def sections() -> dict[str, list]:
     """Nhóm menu -> trang của các plugin người này được thấy (plugin lỗi khai báo bị bỏ qua, xem ở trang Plugin của team)."""
-    reserved = {"", t("Chức năng"), "Team", t("Hệ thống")}  # nhóm của nền tảng (app.py) — trùng tên sẽ đè mất trang
+    # Nhóm của nền tảng (app.py), cả hai ngôn ngữ — trùng tên sẽ đè mất trang
+    reserved = {"", "Chức năng", "Functions", "Team", "Hệ thống", "System", t("Chức năng"), t("Hệ thống")}
     out: dict[str, list] = {}
     for p in plugins.discover():
         if not visible(p):

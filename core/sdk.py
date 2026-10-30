@@ -1,13 +1,14 @@
-"""Bộ công cụ cho plugin — plugin chỉ dùng nền tảng qua mô-đun này:
+"""Plugin toolkit — plugins use the platform only through this module:
 
     from core import sdk
 
-    sdk.header(sdk.t("Theo dõi update nước ngoài"))
+    sdk.header(sdk.t("Overseas updates"))
     sdk.save("updates", [{"id": "kr-2026-10-29", "region": "KR", "date": "2026-10-29", "title": "..."}])
     rows = sdk.load("updates", region="KR")
 
-Tên và cách dùng các hàm ở đây được giữ ổn định: khi nền tảng đổi (vd dời sang server nội bộ), plugin không phải sửa.
-Thêm hàm mới thì được; đổi / bỏ hàm cũ thì không. Hướng dẫn đầy đủ: PLUGIN_GUIDE.md.
+Function names and behaviour here stay stable: when the platform changes (e.g. moves to the internal server), plugins
+need no changes. Adding functions is fine; renaming / removing them is not. Full rules: PLUGIN_GUIDE.md.
+Docstrings are in English: they are copied as-is into AI_PROMPT.md for the team's AIs.
 """
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ _current: contextvars.ContextVar[Plugin | None] = contextvars.ContextVar("l2m_pl
 
 
 class SDKError(Exception):
-    """Dùng sdk sai cách — thông báo nói rõ cần sửa gì."""
+    """sdk used the wrong way — the message says what to fix."""
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +53,7 @@ def _unbind(token: contextvars.Token) -> None:
 
 @contextlib.contextmanager
 def use(plugin_id: str):
-    """Dùng sdk ngoài trang plugin (script, test):  with sdk.use("update_tracker"): sdk.save(...)"""
+    """Use sdk outside a plugin page (scripts, tests):  with sdk.use("update_tracker"): sdk.save(...)"""
     folder = PLUGINS_DIR / plugin_id
     p = read_manifest(folder) if folder.is_dir() else Plugin(id=plugin_id, path=folder, name=plugin_id)
     token = _current.set(p)
@@ -63,10 +64,10 @@ def use(plugin_id: str):
 
 
 def plugin() -> Plugin:
-    """Thông tin plugin đang chạy (id, name, owners, version...)."""
+    """The running plugin's manifest info (id, name, owners, version...)."""
     p = _current.get()
     if p is None:
-        raise SDKError('core.sdk chỉ dùng được trong trang plugin, hoặc trong khối  with sdk.use("<id>"):')
+        raise SDKError('core.sdk only works inside a plugin page, or inside  with sdk.use("<id>"):')
     return p
 
 
@@ -82,7 +83,7 @@ def _in_streamlit() -> bool:
 # Người dùng, quyền, game
 # ---------------------------------------------------------------------------
 def user() -> dict:
-    """{'username', 'display_name', 'role'} của người đang dùng. role: admin / member / viewer (Chỉ xem)."""
+    """{'username', 'display_name', 'role'} of the current user. role: admin / member / viewer (view only)."""
     if _in_streamlit():
         from ui import auth
 
@@ -94,25 +95,27 @@ def user() -> dict:
 
 
 def username() -> str:
+    """Website account of the current user."""
     return user()["username"]
 
 
 def can_edit() -> bool:
-    """Được lưu / sửa / xoá dữ liệu (quyền Chỉ xem thì không). Kiểm tra trước khi hiện nút lưu."""
+    """Whether the user may save / edit / delete data (view-only users may not). Check before showing save buttons."""
     return RANK.get(user()["role"], -1) >= RANK["member"]
 
 
 def is_admin() -> bool:
+    """Whether the current user is a platform admin."""
     return user()["role"] == "admin"
 
 
 def is_owner() -> bool:
-    """Người đang dùng là người phụ trách plugin này (owners trong plugin.toml) hoặc admin."""
+    """Whether the current user is in charge of this plugin (owners in plugin.toml) or an admin."""
     return username() in plugin().owners or is_admin()
 
 
 def game() -> dict:
-    """Game đang chọn ở thanh bên: {'id': 'l2m', 'name': 'Lineage2M SEA', ...}."""
+    """The game selected in the sidebar: {'id': 'l2m', 'name': 'Lineage2M SEA', ...}."""
     if _in_streamlit():
         from ui import common
 
@@ -121,11 +124,12 @@ def game() -> dict:
 
 
 def game_id() -> str:
+    """Id of the selected game, e.g. 'l2m'."""
     return game()["id"]
 
 
 def now() -> datetime:
-    """Giờ hiện tại theo giờ Việt Nam. Máy chủ website chạy giờ UTC — đừng dùng datetime.now()."""
+    """Current time in Vietnam time. The website server runs on UTC — never use datetime.now()."""
     return config.now()
 
 
@@ -133,24 +137,28 @@ def now() -> datetime:
 # Giao diện
 # ---------------------------------------------------------------------------
 def header(title: str, caption: str | None = None) -> None:
-    """Tiêu đề trang (kèm game đang chọn, thông báo quyền Chỉ xem). Gọi ở đầu mỗi trang."""
+    """Page title (with the selected game and the view-only notice). Call at the top of every page."""
     from ui import common
 
     common.page_header(title, caption)
 
 
 def key(name: str) -> str:
-    """Khoá widget / st.session_state có tiền tố plugin: st.text_input("Tên", key=sdk.key("ten"))."""
+    """Widget / st.session_state key with the plugin prefix: st.text_input("Name", key=sdk.key("name"))."""
     return f"{plugin().id}_{name}"
 
 
 def t(text: str, /, **kwargs) -> str:
-    """Chữ hiển thị: viết tiếng Việt; bản tiếng Anh lấy từ locales.py của plugin (EN = {...}), không có thì giữ tiếng Việt."""
+    """Displayed text, in the user's chosen language (Tiếng Việt / English). Write the text in English or Vietnamese;
+    the other language comes from the plugin's locales.py (VI = {...} / EN = {...}); without a translation the text is
+    shown as written. Placeholders: sdk.t("Saved {n} rows", n=5)."""
     lang = i18n.get_lang()
-    if lang != i18n.DEFAULT:
-        p = _current.get()
-        own = _locales(p.id, lang) if p else {}
-        text = own.get(text) or i18n.catalog(lang).get(text, text)
+    p = _current.get()
+    own = _locales(p.id, lang) if p else {}
+    if text in own:
+        text = own[text]
+    elif lang != i18n.DEFAULT:
+        text = i18n.catalog(lang).get(text, text)
     return text.format(**kwargs) if kwargs else text
 
 
@@ -161,7 +169,7 @@ def _locales(plugin_id: str, lang: str) -> dict[str, str]:
 
 @functools.lru_cache(maxsize=64)
 def _read_locales(path: str, lang: str, _mtime: float) -> dict[str, str]:
-    """Đọc EN = {...} trong locales.py mà không chạy file (dict phải viết thẳng)."""
+    """Đọc VI = {...} / EN = {...} trong locales.py mà không chạy file (dict phải viết thẳng)."""
     from pathlib import Path
 
     tree = ast.parse(Path(path).read_text(encoding="utf-8"))
@@ -180,7 +188,8 @@ def _read_locales(path: str, lang: str, _mtime: float) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 def _collection(name: str) -> str:
     if not isinstance(name, str) or not COLLECTION_RE.match(name):
-        raise SDKError(f"Tên bộ sưu tập '{name}' không hợp lệ — chữ thường không dấu, số hoặc _, bắt đầu bằng chữ (vd 'updates')")
+        raise SDKError(f"Invalid collection name '{name}' — lowercase ASCII letters, digits or _, starting with a letter "
+                       "(e.g. 'updates')")
     return name
 
 
@@ -199,7 +208,8 @@ def _json_value(o: Any):
 
 
 def product_key(value) -> str:
-    """Chuẩn hoá Product Key như master: 'com.ncv.l2m.web.item 195' -> 'web.item195' (dùng khi tự ghép khoá bản ghi)."""
+    """Normalise a Product Key the way the master does: 'com.ncv.l2m.web.item 195' -> 'web.item195' (use it when you
+    build record keys yourself)."""
     return short_key(value)
 
 
@@ -219,30 +229,32 @@ def _clean(rec: dict) -> dict:
 
 
 def save(collection: str, records: dict | Iterable[dict], key: str = "id", game: str | None = None) -> int:
-    """Thêm hoặc ghi đè bản ghi (cùng khoá = ghi đè, bản cũ vào lịch sử). Trả về số bản ghi thật sự thay đổi.
-    key: tên trường làm khoá (mặc định 'id'). game: None = game đang chọn, '' = dùng chung mọi game."""
+    """Add or overwrite records (same key = overwrite; the old version goes to history). Returns how many records
+    actually changed. key: the field used as the record key (default 'id'). game: None = selected game,
+    '' = shared by every game."""
     p = plugin()
     _collection(collection)
     if not can_edit():
-        raise SDKError("Tài khoản quyền Chỉ xem không lưu được — kiểm tra sdk.can_edit() trước khi hiện nút lưu")
+        raise SDKError("View-only accounts cannot save — check sdk.can_edit() before showing a save button")
     rows: dict[str, str] = {}
     for rec in [records] if isinstance(records, dict) else list(records):
         if not isinstance(rec, dict):
-            raise SDKError("Mỗi bản ghi phải là dict")
+            raise SDKError("Each record must be a dict")
         clean = _clean(rec)
         value = clean.get(key)
         if value is None or not str(value).strip():
-            raise SDKError(f"Bản ghi thiếu khoá '{key}': {str(rec)[:120]}")
+            raise SDKError(f"Record without the key field '{key}': {str(rec)[:120]}")
         data = json.dumps(clean, ensure_ascii=False, sort_keys=True, default=_json_value)
         if len(data.encode("utf-8")) > MAX_RECORD:
-            raise SDKError(f"Bản ghi '{value}' quá lớn (> {MAX_RECORD // 1024} KB) — file lớn đính kèm qua sdk.record(files=...)")
+            raise SDKError(f"Record '{value}' is too large (> {MAX_RECORD // 1024} KB) — attach large files with "
+                           "sdk.record(files=...)")
         rows[str(value).strip()] = data
     return store.plugin_save(p.id, collection, _game(game), rows, username()) if rows else 0
 
 
 def load(collection: str, game: str | None = None, **where) -> list[dict]:
-    """Mọi bản ghi của một bộ sưu tập (mới sửa trước). Lọc bằng tham số: load("sales", market="TH").
-    Mỗi bản ghi có thêm _key, _updated_by, _updated_at (sdk tự bỏ khi lưu lại)."""
+    """Every record of a collection (most recently changed first). Filter with keyword arguments:
+    load("sales", market="TH"). Each record also has _key, _updated_by, _updated_at (dropped automatically on save)."""
     p = plugin()
     want = _clean(where)
     out = []
@@ -254,22 +266,23 @@ def load(collection: str, game: str | None = None, **where) -> list[dict]:
 
 
 def get(collection: str, key: str, game: str | None = None) -> dict | None:
+    """One record by key (None if missing)."""
     return next((r for r in load(collection, game) if r["_key"] == str(key)), None)
 
 
 def delete(collection: str, keys: str | Iterable[str], game: str | None = None) -> int:
-    """Xoá theo khoá (bản cũ vào lịch sử). Trả về số bản ghi đã xoá."""
+    """Delete by key (the old version goes to history). Returns how many records were deleted."""
     p = plugin()
     _collection(collection)
     if not can_edit():
-        raise SDKError("Tài khoản quyền Chỉ xem không xoá được — kiểm tra sdk.can_edit() trước khi hiện nút xoá")
+        raise SDKError("View-only accounts cannot delete — check sdk.can_edit() before showing a delete button")
     keys = [keys] if isinstance(keys, str) else [str(k) for k in keys]
     return store.plugin_delete(p.id, collection, _game(game), keys, username()) if keys else 0
 
 
 def history(collection: str, key: str, game: str | None = None, limit: int = 50) -> list[dict]:
-    """Các bản cũ của một bản ghi, mới nhất trước: [{'action': 'update'|'delete', 'data': {...}, 'changed_by', 'changed_at'}].
-    Khôi phục = sdk.save(collection, bản_cũ['data'])."""
+    """Old versions of a record, newest first: [{'action': 'update'|'delete', 'data': {...}, 'changed_by', 'changed_at'}].
+    Restore = sdk.save(collection, old['data'])."""
     p = plugin()
     rows = store.plugin_history(p.id, _collection(collection), _game(game), str(key), limit)
     return [{"action": r["action"], "data": json.loads(r["data"] or "{}"), "changed_by": r["changed_by"],
@@ -277,7 +290,7 @@ def history(collection: str, key: str, game: str | None = None, limit: int = 50)
 
 
 def collections(game: str | None = None) -> dict[str, int]:
-    """Bộ sưu tập của plugin này -> số bản ghi."""
+    """This plugin's collections -> record counts."""
     p, g = plugin(), _game(game)
     return {r["collection"]: r["n"] for r in store.plugin_stats() if r["plugin"] == p.id and r["game"] == g}
 
@@ -286,11 +299,11 @@ def collections(game: str | None = None) -> dict[str, int]:
 # Lịch sử hoạt động của team
 # ---------------------------------------------------------------------------
 def record(title: str, summary: dict | None = None, files: dict[str, bytes] | None = None, status: str = "done") -> int:
-    """Ghi một bản vào trang Lịch sử hoạt động (loại Plugin), kèm file kết quả nếu có. Trả về số bản ghi.
-    summary: {'metrics': {'Số gói': 5}, 'tables': {'Tên bảng': [dict, ...]}} hiện đẹp ở trang Lịch sử."""
+    """Log an entry in the team's Activity history (type Plugin), with result files if any. Returns the entry number.
+    summary: {'metrics': {'Packages': 5}, 'tables': {'Table name': [dict, ...]}} is displayed nicely in the history page."""
     p = plugin()
     if not can_edit():
-        raise SDKError("Tài khoản quyền Chỉ xem không ghi lịch sử được")
+        raise SDKError("View-only accounts cannot write to the activity history")
     title = f"[{p.label}] {title}"
     summary = {"plugin": p.id, **(summary or {})}
     if _in_streamlit():
@@ -304,9 +317,9 @@ def record(title: str, summary: dict | None = None, files: dict[str, bytes] | No
 # Dữ liệu dùng chung của nền tảng (chỉ đọc), AI, bí mật
 # ---------------------------------------------------------------------------
 def master():
-    """File master (All Product Information) hiện hành của game đang chọn, đã đọc sẵn — None nếu chưa có.
-    .packages: Product Key -> gói (name, price_usd, purchase_limit, diamonds, items[name, quantity]);
-    .webshop: giá theo thị trường; .display_name(product_key); .timeline. Không sửa được."""
+    """The current master file (All Product Information) of the selected game, already parsed — None if none uploaded.
+    .packages: Product Key -> package (name, price_usd, purchase_limit, diamonds, items[name, quantity]);
+    .webshop: prices by market; .display_name(product_key); .timeline. Read-only."""
     from ui import common
 
     file, _, _ = common.master_paths(game_id())
@@ -314,14 +327,14 @@ def master():
 
 
 def items(game: str | None = None) -> list[dict]:
-    """Bảng Item ID dùng chung: [{'item_id', 'name', 'aliases', 'note'}]."""
+    """The team's shared Item ID table: [{'item_id', 'name', 'aliases', 'note'}]."""
     return [{"item_id": r["item_id"], "name": r["name"], "aliases": r["aliases"], "note": r.get("note", "")}
             for r in store.item_rows(_game(game))]
 
 
 def ai():
-    """AI theo cấu hình chung của team (trang Cài đặt): ai.text(...), ai.json(...). Chưa cấu hình thì báo lỗi trên trang và
-    trả về None."""
+    """AI using the team's shared configuration (Settings page): ai.text(system, prompt), ai.json(system, prompt, schema).
+    If it is not configured, an error is shown on the page and None is returned."""
     if not _in_streamlit():
         return None
     from ui import common
@@ -330,7 +343,7 @@ def ai():
 
 
 def secret(name: str) -> str:
-    """Key / mật khẩu của plugin do admin cài vào secrets của website, tên PLUGIN_<ID>_<NAME>. Chưa cài -> ''."""
+    """A plugin key / password installed by the admin in the website's secrets as PLUGIN_<ID>_<NAME>. Not installed -> ''."""
     if not isinstance(name, str) or not SECRET_RE.match(name):
-        raise SDKError(f"Tên secret '{name}' không hợp lệ — CHỮ_IN_HOA, số hoặc _ (vd 'SHEET_KEY')")
+        raise SDKError(f"Invalid secret name '{name}' — UPPERCASE letters, digits or _ (e.g. 'SHEET_KEY')")
     return config.env(f"PLUGIN_{plugin().id.upper()}_{name}", "")

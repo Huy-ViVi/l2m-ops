@@ -1,233 +1,254 @@
-# Quy định làm plugin cho L2M Ops
+# L2M Ops plugin rules
 
-> Dành cho thành viên team **và AI hỗ trợ họ** (Claude, ChatGPT, Cursor…).
-> AI: đọc hết file này trước khi viết code, làm đúng từng mục, và chạy `tools/check_plugins.py` đến khi báo OK.
-> Công cụ kiểm tra tự động (trên máy, trên website và trên GitHub) chặn các điều ở mục 12.
+> For team members **and the AI helping them** (ChatGPT, Gemini, Copilot, Claude, Cursor…).
+> AI: read this whole file before writing code, follow every section, and run `tools/check_plugins.py` until it reports OK.
+> The automatic checker (on your machine, on the website and on GitHub) blocks everything listed in section 12.
 
-## 1. Plugin là gì
+## 1. What a plugin is
 
-- Mỗi tính năng (app) của một thành viên là **một plugin**, nằm trong **một thư mục** `plugins/<id>/` của kho code nền tảng.
-- Nền tảng lo phần chung: đăng nhập, phân quyền, chọn game, ngôn ngữ, menu, nơi lưu dữ liệu chung, lịch sử hoạt động, AI.
-- Plugin chỉ lo nghiệp vụ của mình và dùng nền tảng qua **một cửa duy nhất**: `from core import sdk`.
-- Plugin **không gọi code của plugin khác**. Các plugin liên kết với nhau qua **dữ liệu dùng chung** (mục 5). Đây là điều kiện để phase 2 nối được thông tin của mọi người.
-- **Ai sửa được gì:**
-  - Thành viên toàn quyền trong thư mục plugin của mình.
-  - Phần lõi chỉ admin nền tảng sửa: `core/`, `ui/`, `views/`, `automation/`, `tools/`, `app.py`, `requirements.txt`.
+- Each member's feature (app) is **one plugin**: **one folder** `plugins/<id>/` in the platform's code repository.
+- The platform handles the shared parts: sign-in, permissions, game selection, language, menu, shared data storage,
+  activity history, AI.
+- A plugin only handles its own business logic and uses the platform through **one single entry point**: `from core import sdk`.
+- A plugin **never calls another plugin's code**. Plugins are linked through **shared data** (section 5). This is what makes
+  linking everyone's information possible in phase 2.
+- **Who can change what:**
+  - Members have full control over their own plugin folder.
+  - Only the platform admin changes the core: `core/`, `ui/`, `views/`, `automation/`, `tools/`, `app.py`, `requirements.txt`.
 
-## 2. Cấu trúc thư mục (bắt buộc)
+## 2. Folder structure (required)
 
 ```
 plugins/<id>/
-├── plugin.toml     khai báo (mục 3)
-├── __init__.py     để trống
-├── README.md       mô tả plugin theo mẫu (mục 9)
-├── page.py         trang; nhiều trang thì nhiều file
-├── locales.py      (không bắt buộc) bản tiếng Anh, mục 8
-└── …               file code phụ, ảnh nhỏ
+├── plugin.toml     manifest (section 3)
+├── __init__.py     empty
+├── README.md       plugin description, following the template (section 9)
+├── page.py         a page; more pages = more files
+├── locales.py      (optional) translations, section 8
+└── …               helper code files, small images
 ```
 
 - `<id>`:
-  - Chữ thường không dấu, số và `_`, dài 3–32 ký tự, bắt đầu bằng chữ. Ví dụ: `update_tracker`, `translation_hub`, `package_monitor`.
-  - Đặt một lần, **không đổi**, vì dữ liệu đã lưu gắn với id.
-- Dung lượng: cả thư mục tối đa 5 MB, mỗi file tối đa 2 MB. Dữ liệu lớn lưu bằng sdk (mục 5).
-- Cách bắt đầu nhanh nhất: chép thư mục `plugins/_template` (plugin mẫu) thành `plugins/<id>`.
+  - Lowercase ASCII letters, digits and `_`, 3–32 characters, starting with a letter. Examples: `update_tracker`,
+    `translation_hub`, `package_monitor`.
+  - Set it once and **never change it**: saved data is tied to the id.
+- Size: the whole folder at most 5 MB, each file at most 2 MB. Large data is saved through sdk (section 5).
+- Quickest start: copy `plugins/_template` (the sample plugin) to `plugins/<id>`.
 
 ## 3. plugin.toml
 
 ```toml
-id = "update_tracker"              # trùng tên thư mục
-name = "Update nước ngoài"         # tên trên menu
-description = "Thu thập và tóm tắt bản update KR/TW/JP."
-version = "0.1.0"                  # tăng mỗi lần cập nhật
-owners = ["myly"]                  # tài khoản website của người phụ trách (có thể nhiều người)
-icon = ":material/public:"         # :material/<tên>: (fonts.google.com/icons) hoặc một emoji
-section = "Thị trường"             # nhóm trên menu; bỏ trống = "Plugin"
-access = "all"                     # all = mọi người đã đăng nhập; admin = chỉ admin
-games = []                         # [] = mọi game; ["l2m"] = chỉ hiện khi chọn Lineage2M SEA
+id = "update_tracker"              # same as the folder name
+name = "Overseas updates"          # name shown in the menu
+description = "Collects and summarises KR/TW/JP updates."
+version = "0.1.0"                  # bump on every update
+owners = ["myly"]                  # website accounts of the people in charge (one or more)
+icon = ":material/public:"         # :material/<name>: (fonts.google.com/icons) or one emoji
+section = "Market"                 # menu group; empty = "Plugin"
+access = "all"                     # all = everyone signed in; admin = admins only
+games = []                         # [] = every game; ["l2m"] = only when Lineage2M SEA is selected
 
 [[pages]]
 file = "page.py"
-title = "Update nước ngoài"
+title = "Overseas updates"
 icon = ":material/public:"
 
-[[pages]]                          # trang thứ hai (nếu có)
+[[pages]]                          # a second page (if any)
 file = "report.py"
-title = "Báo cáo update"
+title = "Update report"
 ```
 
-Không đặt `section` trùng nhóm của nền tảng ("Chức năng", "Team", "Hệ thống").
+Do not use the platform's own menu groups as `section`: "Functions" / "Chức năng", "Team", "System" / "Hệ thống".
 
-## 4. Viết trang
+## 4. Writing a page
 
-- Trang là file Python dùng **Streamlit**. File chạy lại từ trên xuống mỗi lần người dùng thao tác, như một app Streamlit thường.
-- Dòng đầu tiên của trang: `sdk.header(sdk.t("Tiêu đề"))`.
-- **Không** gọi `st.set_page_config`, `st.navigation`, `st.Page`: nền tảng đã lo.
-- **Khoá widget và `st.session_state` phải có tiền tố `<id>_`**, vì mọi trang dùng chung một session. Cách đơn giản nhất là dùng `sdk.key("ten")`:
+- A page is a **Streamlit** Python file. It reruns from top to bottom every time the user interacts, like any Streamlit app.
+- First line of the page: `sdk.header(sdk.t("Title"))`.
+- **Do not** call `st.set_page_config`, `st.navigation` or `st.Page` — the platform does that.
+- **Widget keys and `st.session_state` keys must start with `<id>_`**, because every page shares one session. The easy way is
+  `sdk.key("name")`:
   ```python
-  st.text_input("Từ khoá", key=sdk.key("q"))      # -> "update_tracker_q"
+  st.text_input("Keyword", key=sdk.key("q"))      # -> "update_tracker_q"
   st.session_state[sdk.key("picked")] = 5
   ```
-- Import code phụ của chính mình: `from . import helpers` hoặc `from plugins.<id> import helpers`.
-- Chỉ import `core.sdk` từ nền tảng. Không import `core.store`, `core.db`, `ui`, `views`, `automation` hay plugin khác.
-- Người quyền **Chỉ xem**: kiểm tra `sdk.can_edit()` trước khi hiện nút lưu / sửa / xoá.
-- Plugin bị lỗi lúc chạy thì nền tảng bắt lại và chỉ báo lỗi ở trang của plugin. Dù vậy, vẫn nên tự bắt lỗi nghiệp vụ (file sai mẫu, thiếu cột…) và báo dễ hiểu.
-- Việc chậm: bọc bằng `st.spinner`. Dữ liệu đọc nhiều lần: dùng `st.cache_data` (nhớ đưa `sdk.game_id()` vào tham số).
-- Giờ hiện tại: dùng `sdk.now()` (giờ Việt Nam), không dùng `datetime.now()`, vì máy chủ chạy giờ UTC.
+- Import your own helper code with `from . import helpers` or `from plugins.<id> import helpers`.
+- From the platform, import only `core.sdk`. Never import `core.store`, `core.db`, `ui`, `views`, `automation` or another plugin.
+- **View-only** users: check `sdk.can_edit()` before showing save / edit / delete buttons.
+- If a plugin crashes while running, the platform catches it and shows the error on that plugin's page only. Still, catch
+  business errors yourself (wrong file template, missing columns…) and explain them clearly.
+- Slow work: wrap it in `st.spinner`. Data read many times: use `st.cache_data` (include `sdk.game_id()` in its arguments).
+- Current time: use `sdk.now()` (Vietnam time), not `datetime.now()` — the server runs on UTC.
 
-## 5. Dữ liệu
+## 5. Data
 
-### 5.1 Lưu và đọc
+### 5.1 Saving and reading
 
-- Dữ liệu cần giữ lâu **chỉ lưu bằng sdk**, vào CSDL chung của team.
-- Không ghi file ra ổ đĩa để giữ dữ liệu: ổ đĩa của website bị xoá mỗi lần khởi động lại.
-- Không dùng CSDL riêng (sqlite, Postgres riêng) hay Google Sheet riêng làm nơi lưu chính.
+- Data that must be kept is **saved only through sdk**, into the team's shared database.
+- Do not write files to disk to keep data: the website's disk is wiped on every restart.
+- Do not use your own database (sqlite, a separate Postgres) or your own Google Sheet as the main storage.
 
-| Hàm | Dùng để |
+| Function | Use |
 |---|---|
-| `sdk.save("updates", records, key="id")` | Thêm hoặc ghi đè. Cùng khoá thì ghi đè, bản cũ được giữ trong lịch sử. Trả về số bản ghi thay đổi. |
-| `sdk.load("updates", region="KR")` | Đọc mọi bản ghi, có thể lọc theo trường. Mỗi bản ghi có thêm `_key`, `_updated_by`, `_updated_at`. |
-| `sdk.get("updates", "kr-2026-10-29")` | Đọc một bản ghi theo khoá. |
-| `sdk.delete("updates", keys)` | Xoá; bản cũ được giữ trong lịch sử. |
-| `sdk.history("updates", key)` | Các bản cũ. Khôi phục bằng `sdk.save("updates", ban_cu["data"])`. |
-| `sdk.collections()` | Các bộ sưu tập của plugin và số bản ghi. |
-| `sdk.record("Tiêu đề", summary, files)` | Ghi một bản vào trang Lịch sử hoạt động của team, kèm file kết quả (Excel, ảnh…). |
+| `sdk.save("updates", records, key="id")` | Add or overwrite. Same key = overwrite; the old version is kept in history. Returns how many records changed. |
+| `sdk.load("updates", region="KR")` | Read every record, optionally filtered by field. Each record also has `_key`, `_updated_by`, `_updated_at`. |
+| `sdk.get("updates", "kr-2026-10-29")` | Read one record by key. |
+| `sdk.delete("updates", keys)` | Delete; the old version is kept in history. |
+| `sdk.history("updates", key)` | Old versions. Restore with `sdk.save("updates", old["data"])`. |
+| `sdk.collections()` | This plugin's collections and record counts. |
+| `sdk.record("Title", summary, files)` | Log an entry in the team's Activity history, with result files (Excel, images…). |
 
-- **Bản ghi** là một dict, và mọi giá trị phải lưu được dạng JSON: chữ, số, True/False, None, list, dict. Ngày giờ thì sdk tự đổi sang chữ.
-- **Khoá:**
-  - Mỗi bản ghi có một khoá ổn định, mặc định là trường `id`.
-  - Đặt khoá theo nội dung để chạy lại không sinh bản trùng. Ví dụ: `kr-2026-10-29`, `web.item195-TH-2026-10-28`.
-- **Bộ sưu tập** (tên nhóm bản ghi): chữ thường không dấu, số, `_`. Ví dụ: `updates`, `terms`, `daily_sales`.
+- **A record** is a dict; every value must be JSON-serialisable: text, numbers, True/False, None, lists, dicts. Dates and
+  times are converted to text by sdk.
+- **Keys:**
+  - Every record has a stable key, by default the `id` field.
+  - Build the key from the content so that running again does not create duplicates. Examples: `kr-2026-10-29`,
+    `web.item195-TH-2026-10-28`.
+- **Collection** (name of a group of records): lowercase ASCII, digits, `_`. Examples: `updates`, `terms`, `daily_sales`.
 - **Game:**
-  - Mặc định dữ liệu gắn với game đang chọn ở thanh bên.
-  - Dữ liệu dùng cho mọi game: thêm `game=""` khi save / load.
-- Mỗi bản ghi tối đa 200 KB. File lớn đính kèm qua `sdk.record(..., files={"ten.xlsx": bytes})`.
+  - By default data belongs to the game selected in the sidebar.
+  - Data shared by every game: pass `game=""` to save / load.
+- Each record is at most 200 KB. Attach large files with `sdk.record(..., files={"name.xlsx": bytes})`.
 
-### 5.2 Mã chung — bắt buộc, để phase 2 liên kết được thông tin
+### 5.2 Shared ID fields — required, so that phase 2 can link information
 
-Khi dữ liệu có thông tin dưới đây, **phải** dùng đúng tên trường và định dạng này:
+Whenever your data contains the information below, you **must** use exactly these field names and formats:
 
-| Trường | Ý nghĩa | Định dạng | Ví dụ |
+| Field | Meaning | Format | Example |
 |---|---|---|---|
-| `product_key` | Product Key của gói | như master, bỏ `com.ncv.l2m.` (sdk tự chuẩn hoá trường này; tự ghép khoá thì dùng `sdk.product_key(...)`) | `web.item195` |
-| `item_id` | Item ID trên NC tool | số nguyên | `79` |
-| `item_name` | tên item như trên tool / master (tiếng Anh) | chữ | `Fancy Class Card (11 Times) (Bound)` |
-| `market` | shop / thị trường bán | `SG` `ID` `PH` `MY` `TH` `VN` | `TH` |
-| `region` | máy chủ / phiên bản nước ngoài | `KR` `TW` `JP` `NA` `EU` `SEA` … | `KR` |
-| `version` | phiên bản / bản update | như nguồn ghi | `2026.10.29` |
-| `date` | ngày | `YYYY-MM-DD` | `2026-10-29` |
-| `datetime` | thời điểm, giờ Việt Nam | `YYYY-MM-DD HH:MM:SS` | `2026-10-29 09:30:00` |
-| `currency` | tiền tệ | mã ISO | `THB` |
-| `price` | giá | số | `19.99` |
-| `lang` | ngôn ngữ của văn bản | `vi` `en` `th` `id` `ko` `ja` `zh-TW` … | `th` |
-| `url` | đường dẫn nguồn | đầy đủ `https://…` | |
+| `product_key` | a package's Product Key | as in the master, without `com.ncv.l2m.` (sdk normalises this field; when you build a key yourself use `sdk.product_key(...)`) | `web.item195` |
+| `item_id` | Item ID on NC tool | integer | `79` |
+| `item_name` | item name as on the tool / master (English) | text | `Fancy Class Card (11 Times) (Bound)` |
+| `market` | shop / selling market | `SG` `ID` `PH` `MY` `TH` `VN` | `TH` |
+| `region` | overseas server / version | `KR` `TW` `JP` `NA` `EU` `SEA` … | `KR` |
+| `version` | version / update | as written by the source | `2026.10.29` |
+| `date` | date | `YYYY-MM-DD` | `2026-10-29` |
+| `datetime` | point in time, Vietnam time | `YYYY-MM-DD HH:MM:SS` | `2026-10-29 09:30:00` |
+| `currency` | currency | ISO code | `THB` |
+| `price` | price | number | `19.99` |
+| `lang` | language of a text | `vi` `en` `th` `id` `ko` `ja` `zh-TW` … | `th` |
+| `url` | source link | full `https://…` | |
 
-- Không lưu trường `game`: sdk tự gắn game.
-- Các trường khác: tên tiếng Anh, `snake_case`, không dấu. Ví dụ: `title`, `summary`, `revenue_usd`.
-- Đã dùng một tên trường thì không đổi tên hay đổi ý nghĩa nữa. Cần khác đi thì thêm trường mới.
-- Liệt kê mọi bộ sưu tập và trường trong README.md của plugin (mục 9).
+- Do not save a `game` field — sdk adds the game itself.
+- Other fields: English names, `snake_case`, ASCII only. Examples: `title`, `summary`, `revenue_usd`.
+- Once a field name is in use, never rename it or change its meaning. If something must differ, add a new field.
+- List every collection and field in the plugin's README.md (section 9).
 
-### 5.3 Dữ liệu dùng chung của nền tảng (chỉ đọc)
+### 5.3 Shared platform data (read-only)
 
-- `sdk.master()`: file master *All Product Information* hiện hành của game đang chọn.
-  - `.packages`: gói theo Product Key, gồm tên, giá, limit, diamonds và danh sách item.
-  - `.webshop`: giá theo thị trường.
-  - `.display_name(product_key)`: tên hiển thị của gói.
-  - `.timeline`: lịch bán.
-- `sdk.items()`: bảng Item ID dùng chung của team.
-- Dùng hai hàm này thay vì tự đọc file master hay tự giữ danh sách Item ID riêng.
+- `sdk.master()`: the current *All Product Information* master file of the selected game.
+  - `.packages`: packages by Product Key, with name, price, limit, diamonds and item list.
+  - `.webshop`: prices by market.
+  - `.display_name(product_key)`: display name of a package.
+  - `.timeline`: selling schedule.
+- `sdk.items()`: the team's shared Item ID table.
+- Use these two instead of reading the master file yourself or keeping your own Item ID list.
 
-## 6. Bí mật, AI, thư viện
+## 6. Secrets, AI, libraries
 
-- **Không** ghi API key, mật khẩu, token, địa chỉ CSDL vào code hay file trong plugin. Thay vào đó:
-  - Trong code, đọc bằng `sdk.secret("TEN")`.
-  - Gửi giá trị riêng cho admin. Admin cài vào secrets của website với tên `PLUGIN_<ID>_<TEN>`.
-- AI: dùng `sdk.ai()`, theo cấu hình AI chung của team; có `.text(system, prompt)` và `.json(system, prompt, schema)`. Không tự gọi API AI bằng key riêng.
-- Thư viện:
-  - Chỉ dùng thư viện chuẩn của Python và thư viện có trong `requirements.txt` của nền tảng (streamlit, pandas, openpyxl, requests…).
-  - Cần thêm thư viện: nhắn admin tên, phiên bản và lý do.
-- Ngoài ra không dùng: `subprocess`, `os.system`, Playwright / Selenium, đọc biến môi trường trực tiếp.
+- **Never** write API keys, passwords, tokens or database addresses into code or files of a plugin. Instead:
+  - In code, read them with `sdk.secret("NAME")`.
+  - Send the value privately to the admin, who installs it in the website's secrets as `PLUGIN_<ID>_<NAME>`.
+- AI: use `sdk.ai()` — the team's shared AI configuration — with `.text(system, prompt)` and `.json(system, prompt, schema)`.
+  Do not call an AI API yourself with your own key.
+- Libraries:
+  - Only the Python standard library and the libraries in the platform's `requirements.txt` (streamlit, pandas, openpyxl,
+    requests…).
+  - Need another library: ask the admin, with its name, version and why.
+- Also never use: `subprocess`, `os.system`, Playwright / Selenium, reading environment variables directly.
 
-## 7. Việc chạy nền, chạy định kỳ, cần VPN
+## 7. Background, scheduled and VPN work
 
-Phase 1 **chưa** hỗ trợ trong plugin:
-- việc chạy định kỳ (vd thu thập update mỗi sáng);
-- việc cần VPN công ty hoặc điều khiển trình duyệt (NC tool, MyTool);
-- việc nặng (trên khoảng 30 giây, hoặc file rất lớn).
+Phase 1 does **not** support these inside plugins yet:
+- scheduled work (e.g. collecting updates every morning);
+- work that needs the company VPN or browser automation (NC tool, MyTool);
+- heavy work (more than ~30 seconds, or very large files).
 
-Trong lúc chờ:
-- Cho người dùng **bấm nút để chạy** (việc ngắn), hoặc **tải file lên** để plugin xử lý.
-- Ghi rõ nhu cầu vào README mục "Cần từ nền tảng" để admin làm ở phase 3.
+Meanwhile:
+- Let the user **click a button to run** short work, or **upload a file** for the plugin to process.
+- Write the need in the README section "Needs from the platform" so the admin can build it in phase 3.
 
-## 8. Ngôn ngữ
+## 8. Language
 
-- Chữ hiển thị viết **tiếng Việt** và bọc bằng `sdk.t("…")`. Chỗ cần điền số dùng `sdk.t("Đã lưu {n} dòng", n=5)`, không dùng f-string bên trong `sdk.t`.
-- Khuyến khích thêm `locales.py` để người chọn English thấy tiếng Anh:
+- The team has Vietnamese and international members, and website users choose Tiếng Việt or English in the sidebar.
+- Write UI text in **English or Vietnamese** — pick one and use it everywhere in the plugin — and wrap every displayed
+  text in `sdk.t("…")`. With numbers use `sdk.t("Saved {n} rows", n=5)`, never an f-string inside `sdk.t`.
+- Add `locales.py` with the other language, so every user sees their own language:
   ```python
-  EN = {"Đã lưu {n} dòng": "Saved {n} rows"}
+  VI = {"Saved {n} rows": "Đã lưu {n} dòng"}    # UI written in English -> Vietnamese translation
+  EN = {"Đã lưu {n} dòng": "Saved {n} rows"}    # UI written in Vietnamese -> English translation
   ```
-  Dict phải viết thẳng: nền tảng đọc file này mà không chạy nó.
+  The dicts must be written literally: the platform reads this file without running it.
 
-## 9. README.md của plugin (mẫu)
+## 9. Plugin README.md (template)
 
 ```markdown
-# <Tên plugin>
-Người phụ trách: <tài khoản>
+# <Plugin name>
+Owner: <account>
 
-## Làm gì
-## Trang
-## Dữ liệu lưu
-| Bộ sưu tập | Khoá | Trường | Mã chung dùng |
+## What it does
+## Pages
+## Saved data
+| Collection | Key | Fields | Shared IDs used |
 |---|---|---|---|
-## Dữ liệu dùng từ nền tảng / plugin khác
-## Cần từ nền tảng
-(chạy định kỳ? cần VPN? thư viện thêm? secret?)
-## Thay đổi
-- 0.1.0 (YYYY-MM-DD): bản đầu
+## Data used from the platform / other plugins
+## Needs from the platform
+(scheduled runs? VPN? extra libraries? secrets?)
+## Changes
+- 0.1.0 (YYYY-MM-DD): first version
 ```
 
-## 10. Chạy thử, kiểm tra và đưa lên
+## 10. Trying, checking and submitting
 
-1. **Chạy thử trên máy:**
-   - Tải *Bộ khởi đầu* ở trang **Plugin của team** trên website và giải nén.
-   - Chép `plugins/_template` thành `plugins/<id>`.
-   - Nháy đúp `run.bat`. Plugin hiện ở menu bên trái; dữ liệu khi chạy thử chỉ lưu trên máy bạn.
-2. **Tự kiểm tra:**
-   - Chạy `.venv\Scripts\python.exe tools\check_plugins.py plugins\<id>` cho đến khi báo `OK`.
-   - Hoặc nén thư mục plugin thành .zip rồi tải lên ô *Tự kiểm tra* trên trang **Plugin của team**.
-3. **Đưa lên** — chọn một trong hai cách:
-   - **GitHub** (khi admin đã thêm bạn vào kho):
-     - Tải thư mục lên đúng chỗ `plugins/<id>/`, chỉ sửa trong thư mục của mình.
-     - Khoảng 1–2 phút sau website tự cập nhật.
-     - Kiểm tra tự động (tab Actions trên GitHub) chạy sau mỗi lần đẩy code. Báo đỏ thì sửa ngay.
-   - **Gửi zip trên website:** trang **Plugin của team** → *Đưa plugin lên* → tải zip → *Gửi plugin cho admin*. Admin sẽ đưa lên.
-4. **Mỗi lần cập nhật:**
-   - Tăng `version` trong plugin.toml.
-   - Thêm một dòng vào mục "Thay đổi" của README.
-5. **Dữ liệu từ app cũ:** làm một nút "Nhập dữ liệu" trong plugin (tải file Excel / CSV xuất từ app cũ lên → `sdk.save`), để không mất dữ liệu đã có.
+Step-by-step guide for users (chat AIs and folder-based AIs alike): `PLUGIN_QUICKSTART.md`.
 
-## 11. Checklist trước khi gửi
+1. **Try it on your machine:**
+   - Download the *Starter kit* from the **Team plugins** (Plugin của team) page on the website and unzip it.
+   - Create the plugin in one of two ways:
+     - copy `plugins/_template` to `plugins/<id>`;
+     - or paste a chat AI's answer into `ai-answer.txt` and double-click `make-plugin.bat`.
+   - Double-click `run.bat`. The plugin appears in the left menu; test data is stored on your machine only.
+2. **Self-check** — one of three ways:
+   - Run `.venv\Scripts\python.exe tools\check_plugins.py plugins\<id>` until it reports `OK`.
+   - On the **Team plugins → Check & submit** page, paste a chat AI's whole answer into the check box.
+   - Or zip the plugin folder and upload it on that page.
+3. **Submit** — one of two ways:
+   - **Code repository** (once the admin has added you):
+     - Upload the folder to exactly `plugins/<id>/`; only change your own folder.
+     - About 1–2 minutes later the website updates itself.
+     - The automatic check runs after every push. If it turns red, fix it right away.
+   - **Send a zip on the website:** **Team plugins → Check & submit** → check → *Send the plugin to the admin*. The
+     admin publishes it.
+4. **On every update:**
+   - Bump `version` in plugin.toml.
+   - Add one line to the "Changes" section of the README.
+5. **Data from an old app:** build an "Import data" button in the plugin (upload an Excel / CSV export of the old app →
+   `sdk.save`), so no existing data is lost.
 
-- [ ] `plugin.toml` đủ trường; `id` trùng tên thư mục; `owners` đúng tài khoản website.
-- [ ] Chỉ import `core.sdk` từ nền tảng; không import plugin khác.
-- [ ] Dữ liệu lưu bằng sdk. Mã chung đúng tên và định dạng (mục 5.2). Khoá bản ghi ổn định.
-- [ ] Khoá widget / session_state có tiền tố `<id>_` (dùng `sdk.key`).
-- [ ] Có kiểm tra `sdk.can_edit()` trước khi lưu, sửa, xoá.
-- [ ] Không có key, mật khẩu, token, địa chỉ CSDL hay file dữ liệu lớn trong thư mục.
-- [ ] Chữ hiển thị bọc `sdk.t`.
-- [ ] README.md đủ mục; đã tăng `version`.
-- [ ] `tools/check_plugins.py` báo OK; đã chạy thử bằng `run.bat`.
+## 11. Checklist before submitting
 
-## 12. Bị chặn tự động
+- [ ] `plugin.toml` has every field; `id` equals the folder name; `owners` are correct website accounts.
+- [ ] Only `core.sdk` is imported from the platform; no other plugin is imported.
+- [ ] Data is saved through sdk. Shared ID fields have the right names and formats (section 5.2). Record keys are stable.
+- [ ] Widget / session_state keys start with `<id>_` (use `sdk.key`).
+- [ ] `sdk.can_edit()` is checked before saving, editing, deleting.
+- [ ] No keys, passwords, tokens, database addresses or large data files in the folder.
+- [ ] Displayed text is wrapped in `sdk.t`; `locales.py` has the other language.
+- [ ] README.md has every section; `version` was bumped.
+- [ ] `tools/check_plugins.py` reports OK; tried with `run.bat`.
 
-| Bị chặn | Thay bằng |
+## 12. Blocked automatically
+
+| Blocked | Use instead |
 |---|---|
-| Thiếu `plugin.toml` / `__init__.py` / `README.md`, khai báo sai | sửa theo mục 2–3 |
-| Import `core.*` khác `core.sdk`, `ui`, `views`, `automation`, plugin khác | `from core import sdk`; liên kết qua dữ liệu |
+| Missing `plugin.toml` / `__init__.py` / `README.md`, invalid manifest | fix following sections 2–3 |
+| Importing `core.*` other than `core.sdk`, `ui`, `views`, `automation`, another plugin | `from core import sdk`; link through data |
 | `sqlite3`, `psycopg`, `sqlalchemy` | `sdk.save` / `sdk.load` |
-| `subprocess`, `os.system`, Playwright, Selenium | chờ phase 3 (agent); ghi nhu cầu vào README |
-| `os.environ`, `os.getenv` | `sdk.secret` |
-| `st.set_page_config`, `st.navigation` | bỏ — nền tảng đã lo |
-| Khoá widget / session_state không có tiền tố `<id>_` | `sdk.key("…")` |
-| Thư viện không có trong `requirements.txt` | nhắn admin thêm |
-| Key / token / mật khẩu / địa chỉ CSDL trong file; file `.env`, `local.json`, `secrets.toml`, `.db` | `sdk.secret`; dữ liệu qua sdk |
-| File > 2 MB, thư mục > 5 MB, lỗi cú pháp Python | tách dữ liệu ra CSDL; sửa lỗi |
+| `anthropic`, `openai` | `sdk.ai()` |
+| `subprocess`, `os.system`, Playwright, Selenium | wait for phase 3 (agent); write the need in the README |
+| `os.environ`, `os.getenv`, `st.secrets` | `sdk.secret` |
+| `st.set_page_config`, `st.navigation` | remove — the platform does it |
+| `st.experimental_*` (removed in current Streamlit) | `st.rerun`, `st.cache_data`, `st.query_params` |
+| Widget / session_state keys without the `<id>_` prefix | `sdk.key("…")` |
+| Libraries not in `requirements.txt` | ask the admin to add them |
+| Keys / tokens / passwords / database addresses in files; `.env`, `local.json`, `secrets.toml`, `.db` files | `sdk.secret`; data through sdk |
+| Files > 2 MB, folder > 5 MB, Python syntax errors | move data to the database; fix the error |

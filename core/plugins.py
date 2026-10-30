@@ -50,6 +50,8 @@ BLOCKED_MODULES = {
     "subprocess": "việc cần chạy chương trình ngoài sẽ đi qua agent (lộ trình phase 3)",
     "playwright": "việc cần trình duyệt / VPN sẽ đi qua agent (lộ trình phase 3)",
     "selenium": "việc cần trình duyệt / VPN sẽ đi qua agent (lộ trình phase 3)",
+    "anthropic": "dùng AI chung của team qua sdk.ai()",
+    "openai": "dùng AI chung của team qua sdk.ai()",
 }
 BLOCKED_CALLS = {  # st.<tên>(...) mà nền tảng đã lo
     "set_page_config": "nền tảng đã gọi st.set_page_config",
@@ -297,6 +299,12 @@ def _check_calls(tree: ast.AST, rel: str, pid: str, problems: list[str]) -> None
                                   file=rel, line=node.lineno, key=value, prefix=prefix))
         elif isinstance(node, ast.Attribute) and node.attr == "environ" and isinstance(node.value, ast.Name) and node.value.id == "os":
             problems.append(t("{file}:{line}: không đọc biến môi trường — dùng sdk.secret(\"TÊN\")", file=rel, line=node.lineno))
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "st":
+            if node.attr == "secrets":
+                problems.append(t("{file}:{line}: không đọc st.secrets — dùng sdk.secret(\"TÊN\")", file=rel, line=node.lineno))
+            elif node.attr.startswith("experimental_"):  # AI hay viết theo Streamlit cũ
+                problems.append(t("{file}:{line}: st.{name} không còn trong Streamlit mới — dùng st.rerun / st.cache_data / st.query_params",
+                                  file=rel, line=node.lineno, name=node.attr))
 
 
 def validate(folder: Path) -> Plugin:
@@ -337,6 +345,70 @@ def validate(folder: Path) -> Plugin:
         p.problems.append(t("Thư mục plugin {size} MB — tối đa {max} MB", size=round(total / 1048576, 1), max=MAX_TOTAL // 1048576))
     p.problems = list(dict.fromkeys(p.problems))
     return p
+
+
+# ---------------------------------------------------------------------------
+# Câu trả lời của AI dạng chat -> file plugin (định dạng trong AI_PROMPT.md: "FILE: plugins/<id>/x" + khối ```)
+# ---------------------------------------------------------------------------
+FILE_LINE_RE = re.compile(r"^[\s>#*_-]*FILE\s*:\s*`?([^\s`*]+?)`?[\s*_]*$", re.I)
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
+END_LINE_RE = re.compile(r"^[\s>#*_-]*(HẾT|HET|END(\s+OF)?)\s+FILES?[\s*_.-]*$", re.I)
+
+
+def files_from_text(text: str) -> tuple[str, dict[str, str], list[str]]:
+    """-> (id, {đường dẫn trong thư mục plugin: nội dung}, vấn đề). Chấp nhận các kiểu AI hay viết: **FILE: x**, ### FILE: `x`,
+    đường dẫn thiếu plugins/<id>/; thiếu __init__.py thì tự thêm (luôn để trống)."""
+    lines = text.replace("\r\n", "\n").split("\n")
+    ends = [i for i, line in enumerate(lines) if END_LINE_RE.match(line)]
+    if ends:
+        lines = lines[:ends[-1]]
+    marks = [(i, m.group(1)) for i, line in enumerate(lines) if (m := FILE_LINE_RE.match(line))]
+    problems: list[str] = []
+    if not marks:
+        return "", {}, [t("Không thấy dòng 'FILE: …' nào — nhờ AI trả lời đúng định dạng ở mục 3 của AI_PROMPT.md")]
+    raw: dict[str, str] = {}
+    for n, (i, path) in enumerate(marks):
+        chunk = lines[i + 1: marks[n + 1][0] if n + 1 < len(marks) else len(lines)]
+        fences = [k for k, line in enumerate(chunk) if FENCE_RE.match(line)]
+        if len(fences) < 2:
+            problems.append(t("{file}: không thấy khối code chứa nội dung file", file=path))
+            continue
+        body = "\n".join(chunk[fences[0] + 1:fences[-1]]).rstrip("\n")
+        raw[re.sub(r"^(\./)+", "", path.strip().replace("\\", "/"))] = body + "\n" if body else ""
+    pid = ""
+    manifest = next((v for k, v in raw.items() if k.rsplit("/", 1)[-1] == MANIFEST), None)
+    if manifest is None:
+        problems.append(t("Trong câu trả lời không có file {file}", file=MANIFEST))
+    else:
+        try:
+            pid = str(tomllib.loads(manifest).get("id") or "")
+        except tomllib.TOMLDecodeError as e:
+            problems.append(t("{file} viết sai cú pháp TOML: {error}", file=MANIFEST, error=e))
+    if not ID_RE.match(pid):
+        pid = next((k.split("/")[1] for k in raw if k.startswith("plugins/") and k.count("/") >= 2), "") or pid
+    if not ID_RE.match(pid):
+        problems.append(t("id phải là chữ thường không dấu, số hoặc _, 3–32 ký tự, bắt đầu bằng chữ (vd update_tracker)"))
+        return pid, {}, problems
+    files: dict[str, str] = {}
+    for path, body in raw.items():
+        rel = path if path.startswith("plugins/") else (f"plugins/{path}" if path.startswith(pid + "/") else f"plugins/{pid}/{path}")
+        prefix = f"plugins/{pid}/"
+        if not rel.startswith(prefix) or ".." in rel.split("/") or rel == prefix:
+            problems.append(t("{file}: nằm ngoài thư mục plugins/{id}/ — bỏ qua", file=path, id=pid))
+            continue
+        files[rel[len(prefix):]] = body
+    if files and "__init__.py" not in files:
+        files["__init__.py"] = ""
+    return pid, files, problems
+
+
+def zip_plugin(pid: str, files: dict[str, str]) -> bytes:
+    """{đường dẫn: nội dung} -> zip có thư mục <id>/ (giống zip người dùng tự nén thư mục plugin)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for rel, body in sorted(files.items()):
+            z.writestr(f"{pid}/{rel}", body.encode("utf-8"))
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------

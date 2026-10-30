@@ -1,17 +1,17 @@
-# Khai báo plugin — xem PLUGIN_GUIDE.md mục 3.
-# Chép cả thư mục _template thành plugins/<id>/ rồi sửa các dòng dưới.
+# Plugin manifest — see PLUGIN_GUIDE.md section 3.
+# Copy the whole _template folder to plugins/<id>/ and edit the lines below.
 
-id = "doi_thanh_ten_thu_muc"     # trùng tên thư mục: chữ thường không dấu, số, _ (vd "update_tracker")
-name = "Ghi chú gói nạp"         # tên hiện trên menu
-description = "Plugin mẫu: ghi chú theo gói nạp, minh hoạ cách lưu / đọc dữ liệu qua sdk."
-version = "0.1.0"                # tăng mỗi lần cập nhật, ghi lại ở README mục Thay đổi
-owners = ["ten_tai_khoan"]       # tài khoản website của người phụ trách (có thể nhiều người)
-icon = ":material/sticky_note_2:"  # :material/<tên>: (fonts.google.com/icons) hoặc một emoji
-section = "Plugin"               # nhóm trên menu bên trái
-access = "all"                   # all = mọi người đã đăng nhập; admin = chỉ admin
-games = []                       # [] = mọi game; ["l2m"] = chỉ hiện khi chọn Lineage2M SEA
+id = "rename_to_folder_name"     # same as the folder name: lowercase ASCII, digits, _ (e.g. "update_tracker")
+name = "Package notes"           # name shown in the menu
+description = "Sample plugin: notes per top-up package, showing how to save / read data through sdk."
+version = "0.1.0"                # bump on every update, note it in the README Changes section
+owners = ["your_account"]        # website accounts of the people in charge (one or more)
+icon = ":material/sticky_note_2:"  # :material/<name>: (fonts.google.com/icons) or one emoji
+section = "Plugin"               # menu group in the left sidebar
+access = "all"                   # all = everyone signed in; admin = admins only
+games = []                       # [] = every game; ["l2m"] = only when Lineage2M SEA is selected
 
-[[pages]]                        # mỗi trang một khối [[pages]]
+[[pages]]                        # one [[pages]] block per page
 file = "page.py"
-title = "Ghi chú gói nạp"
+title = "Package notes"
 icon = ":material/sticky_note_2:"

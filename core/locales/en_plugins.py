@@ -60,6 +60,18 @@ EN = {
     "menu do nền tảng dựng từ plugin.toml": "the platform builds the menu from plugin.toml",
     "địa chỉ CSDL kèm mật khẩu": "a database address with a password",
 
+    "{file}:{line}: không đọc st.secrets — dùng sdk.secret(\"TÊN\")": "{file}:{line}: do not read st.secrets — use sdk.secret(\"NAME\")",
+    "{file}:{line}: st.{name} không còn trong Streamlit mới — dùng st.rerun / st.cache_data / st.query_params":
+        "{file}:{line}: st.{name} no longer exists in current Streamlit — use st.rerun / st.cache_data / st.query_params",
+    "dùng AI chung của team qua sdk.ai()": "use the team's shared AI through sdk.ai()",
+
+    # core/plugins.py — tách câu trả lời của AI
+    "Không thấy dòng 'FILE: …' nào — nhờ AI trả lời đúng định dạng ở mục 3 của AI_PROMPT.md":
+        "No 'FILE: …' line found — ask your AI to answer in the format of section 3 of AI_PROMPT.md",
+    "{file}: không thấy khối code chứa nội dung file": "{file}: no code block with the file content found",
+    "Trong câu trả lời không có file {file}": "The answer has no {file} file",
+    "{file}: nằm ngoài thư mục plugins/{id}/ — bỏ qua": "{file}: outside the plugins/{id}/ folder — skipped",
+
     # core/plugins.py — kiểm tra zip
     "File zip quá lớn (tối đa {max} MB)": "The zip file is too large (max {max} MB)",
     "Không đọc được file zip": "Could not read the zip file",
@@ -76,16 +88,19 @@ EN = {
     "🧩 Plugin của team": "🧩 Team plugins",
     "Mỗi tính năng của thành viên là một plugin trên nền tảng này — cùng đăng nhập, cùng dữ liệu, cùng menu.":
         "Each member's feature is a plugin on this platform — one sign-in, shared data, one menu.",
-    "**Thông báo cho cả team** — nền tảng đã nhận plugin (phase 1: đưa app của mọi người lên).  \n"
-    "1. Trước khi build / chuyển app của bạn: tải **Bộ khởi đầu** ở tab *Đưa plugin lên*.  \n"
-    "2. Đưa AI của bạn đọc **AGENTS.md** và **PLUGIN_GUIDE.md** trong bộ đó, để nó tự làm theo quy định.  \n"
-    "3. Chạy thử trên máy, tự kiểm tra, rồi gửi. Quy định đầy đủ ở tab *Quy định*, các bước tiếp theo ở tab *Lộ trình*.":
-        "**Announcement for the team** — the platform now accepts plugins (phase 1: bring everyone's apps in).  \n"
-        "1. Before building / converting your app: download the **Starter kit** in the *Submit a plugin* tab.  \n"
-        "2. Have your AI read **AGENTS.md** and **PLUGIN_GUIDE.md** from that kit so it follows the rules on its own.  \n"
-        "3. Try it on your machine, self-check, then submit. Full rules in the *Rules* tab, next steps in the *Roadmap* tab.",
+    "**Thông báo cho cả team** — nền tảng đã nhận plugin (phase 1: đưa app của mọi người lên), làm bằng **AI nào cũng được** "
+    "(ChatGPT, Gemini, Copilot, Claude, Cursor…).  \n"
+    "1. Tab **Bắt đầu**: tải **AI_PROMPT.md**, đưa cho AI của bạn kèm mô tả app.  \n"
+    "2. Tab **Kiểm tra & gửi**: dán câu trả lời của AI để kiểm tra; đạt thì gửi cho admin.\n\n"
+    "Quy định đầy đủ ở tab *Quy định*, các bước tiếp theo của cả team ở tab *Lộ trình*.":
+        "**Announcement for the team** — the platform now accepts plugins (phase 1: bring everyone's apps in), built with "
+        "**any AI** (ChatGPT, Gemini, Copilot, Claude, Cursor…).  \n"
+        "1. **Get started** tab: download **AI_PROMPT.md** and give it to your AI along with a description of your app.  \n"
+        "2. **Check & submit** tab: paste the AI's answer to check it; once it passes, send it to the admin.\n\n"
+        "Full rules in the *Rules* tab, the team's next steps in the *Roadmap* tab.",
+    "Bắt đầu": "Get started",
+    "Kiểm tra & gửi": "Check & submit",
     "Danh sách plugin": "Plugin list",
-    "Đưa plugin lên": "Submit a plugin",
     "Quy định (PLUGIN_GUIDE.md)": "Rules (PLUGIN_GUIDE.md)",
     "Lộ trình": "Roadmap",
     "Chưa có plugin nào. Plugin đầu tiên sẽ hiện ở đây và ở menu bên trái.":
@@ -102,35 +117,49 @@ EN = {
     "plugin lỗi khi chạy chỉ báo lỗi ở trang của nó, phần còn lại vẫn dùng bình thường.":
         "Plugins with a broken plugin.toml or rule violations stay out of the menu until fixed; "
         "a plugin that fails while running only shows the error on its own page, the rest keeps working.",
-    "**1. Tải bộ khởi đầu** — code nền tảng chạy được trên máy bạn, plugin mẫu, quy định và hướng dẫn cho AI. "
-    "Không chứa địa chỉ CSDL hay dữ liệu của team.":
-        "**1. Download the starter kit** — platform code that runs on your machine, a sample plugin, the rules and AI "
-        "instructions. It contains no database address or team data.",
-    "⬇ Tải bộ khởi đầu làm plugin (.zip)": "⬇ Download the plugin starter kit (.zip)",
-    "**2. Làm plugin** theo file BAT-DAU-LAM-PLUGIN.txt trong bộ đó (chép plugin mẫu, nhờ AI viết, chạy thử bằng run.bat).":
-        "**2. Build the plugin** following BAT-DAU-LAM-PLUGIN.txt in the kit (copy the sample, ask your AI, try it with run.bat).",
-    "**3. Tự kiểm tra** — nén thư mục plugin của bạn (thư mục có plugin.toml) thành .zip rồi tải lên đây. "
-    "App chỉ đọc code, không chạy.":
-        "**3. Self-check** — zip your plugin folder (the one with plugin.toml) and upload it here. "
-        "The app only reads the code, it does not run it.",
-    "File .zip của plugin": "Plugin .zip file",
+    "⬇ Tải AI_PROMPT.md": "⬇ Download AI_PROMPT.md",
+    "Một file cho mọi AI: quy định, công cụ của nền tảng, plugin mẫu và cách trả lời để nền tảng tự tách file. "
+    "Đính kèm vào AI (hoặc dán toàn bộ nội dung), rồi mô tả app của bạn.":
+        "One file for any AI: the rules, the platform tools, a sample plugin and the answer format the platform splits into "
+        "files. Attach it to your AI (or paste all of it), then describe your app.",
+    "Xem / sao chép toàn bộ prompt ({n} ký tự)": "View / copy the whole prompt ({n} characters)",
+    "Đã đọc {n} file: {files}": "Read {n} files: {files}",
     "✅ Plugin **{name}** (`{id}` v{version}) đạt quy định — {n} trang.":
         "✅ Plugin **{name}** (`{id}` v{version}) meets the rules — {n} pages.",
-    "**4. Gửi** — đưa thư mục lên GitHub vào đúng chỗ `plugins/{id}/` (nếu bạn đã được thêm vào kho), "
-    "hoặc gửi zip cho admin ngay dưới đây.":
-        "**4. Submit** — upload the folder to GitHub at `plugins/{id}/` (if you have been added to the repository), "
-        "or send the zip to the admin right below.",
+    "⬇ Tải plugin (.zip) để chạy thử trên máy": "⬇ Download the plugin (.zip) to try it on your machine",
+    "**Gửi** — gửi cho admin ngay dưới đây; hoặc nếu bạn đã được thêm vào kho code, đưa thư mục vào đúng chỗ "
+    "`plugins/{id}/`.":
+        "**Submit** — send it to the admin right below; or, if you have been added to the code repository, put the folder at "
+        "`plugins/{id}/`.",
     "Ghi chú cho admin (đổi gì, cần thêm thư viện / secret gì)":
         "Note for the admin (what changed, any library / secret needed)",
     "📤 Gửi plugin cho admin": "📤 Send the plugin to the admin",
     "Gửi plugin {id} v{version}": "Plugin submission {id} v{version}",
     "Đã gửi (bản ghi #{aid} ở trang Lịch sử hoạt động, loại Gửi plugin). Admin sẽ đưa lên.":
         "Sent (record #{aid} in Activity history, type Plugin submission). The admin will publish it.",
-    "Plugin chưa đạt — {n} điểm cần sửa:": "The plugin does not pass yet — {n} things to fix:",
+    "Plugin chưa đạt — {n} điểm cần sửa. Sao chép danh sách dưới, gửi lại cho AI: "
+    "\"Công cụ kiểm tra báo các lỗi sau, sửa hết và trả lại toàn bộ file:\"":
+        "The plugin does not pass yet — {n} things to fix. Copy the list below and send it back to your AI: "
+        "\"The checker reports these problems, fix them all and return every file:\"",
+    "**Dán câu trả lời của AI** (AI dạng chat) — dán toàn bộ, từ đầu tới dòng END OF FILES. App chỉ đọc code, không chạy.":
+        "**Paste your AI's answer** (chat AIs) — paste all of it, down to the END OF FILES line. The app only reads the code, "
+        "it does not run it.",
+    "Dán câu trả lời của AI": "Paste your AI's answer",
+    "🔍 Kiểm tra": "🔍 Check",
+    "**Hoặc tải lên file .zip** của thư mục plugin (thư mục có plugin.toml) — khi làm bằng Bộ khởi đầu / AI làm việc trên thư mục.":
+        "**Or upload a .zip** of the plugin folder (the one with plugin.toml) — when working with the Starter kit / a folder-based AI.",
+    "File .zip của plugin": "Plugin .zip file",
+    "**Bộ khởi đầu** — chạy thử plugin trên máy bạn (run.bat), tách câu trả lời của AI thành file (make-plugin.bat), "
+    "dùng với AI làm việc trên thư mục (Cursor, Claude Code, Copilot, Codex, Gemini CLI). "
+    "Không chứa địa chỉ CSDL hay dữ liệu của team.":
+        "**Starter kit** — try your plugin on your machine (run.bat), split an AI answer into files (make-plugin.bat), and use "
+        "it with folder-based AIs (Cursor, Claude Code, Copilot, Codex, Gemini CLI). It contains no database address or team data.",
+    "⬇ Tải bộ khởi đầu làm plugin (.zip)": "⬇ Download the plugin starter kit (.zip)",
     "Admin: plugin gửi lên nằm ở trang Lịch sử hoạt động (loại Gửi plugin) — tải zip, kiểm tra, rồi đưa thư mục "
     "vào plugins/<id>/ trên GitHub.":
         "Admin: submitted plugins are in Activity history (type Plugin submission) — download the zip, review it, then put "
         "the folder in plugins/<id>/ on GitHub.",
     "Chưa có file {file}.": "File {file} is missing.",
-    "Tài liệu này viết bằng tiếng Việt.": "This document is written in Vietnamese.",
+    "Tài liệu viết bằng tiếng Anh để cả team, kể cả thành viên nước ngoài, cùng đọc.":
+        "This document is in English so the whole team, including international members, can read it.",
 }

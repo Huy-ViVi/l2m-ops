@@ -1,25 +1,27 @@
-# Ghi chú gói nạp (plugin mẫu)
+# Package notes (sample plugin)
 
-Người phụ trách: ten_tai_khoan
+Owner: your_account
 
-## Làm gì
-Ghi chú theo gói nạp (Product Key); hiện kèm tên gói lấy từ file master của team. Đây là plugin mẫu, minh hoạ cách dùng `core.sdk`.
+## What it does
+Notes per top-up package (Product Key), shown together with the package name from the team's master file. This is the
+sample plugin showing how to use `core.sdk`.
 
-## Trang
-- **Ghi chú gói nạp** (`page.py`): thêm, xem, xoá ghi chú; xem lịch sử sửa / xoá; ghi tổng hợp vào Lịch sử hoạt động.
+## Pages
+- **Package notes** (`page.py`): add, view and delete notes; see the edit / delete history; log a summary to the
+  Activity history.
 
-## Dữ liệu lưu
-| Bộ sưu tập | Khoá | Trường | Mã chung dùng |
+## Saved data
+| Collection | Key | Fields | Shared IDs used |
 |---|---|---|---|
 | `notes` | `id` = `<product_key>-<YYYYMMDDHHMMSS>` | `product_key`, `note`, `date` | `product_key`, `date` |
 
-Dữ liệu gắn với game đang chọn.
+Data belongs to the selected game.
 
-## Dữ liệu dùng từ nền tảng / plugin khác
-- `sdk.master()`: tên gói theo Product Key.
+## Data used from the platform / other plugins
+- `sdk.master()`: package name by Product Key.
 
-## Cần từ nền tảng
-Không có (không cần chạy định kỳ, VPN, thư viện thêm hay secret).
+## Needs from the platform
+None (no scheduled runs, VPN, extra libraries or secrets).
 
-## Thay đổi
-- 0.1.0 (2026-10-29): bản đầu.
+## Changes
+- 0.1.0 (2026-10-29): first version.

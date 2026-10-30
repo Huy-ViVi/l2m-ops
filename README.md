@@ -138,15 +138,32 @@ Mọi mốc thời gian ghi vào CSDL / hiển thị theo giờ Việt Nam (UTC+
 ## Nền tảng plugin (tính năng của thành viên)
 
 Mỗi tính năng của thành viên là một **plugin**: thư mục `plugins/<id>/` có `plugin.toml`. Website tự đưa plugin vào menu.
+
+Tài liệu cho thành viên (quy định, hướng dẫn, prompt, lộ trình, plugin mẫu) viết bằng **tiếng Anh**, vì team có thành viên nước ngoài. Plugin viết giao diện bằng tiếng Anh hoặc tiếng Việt đều được, kèm `locales.py` cho ngôn ngữ còn lại (`VI = {…}` / `EN = {…}`).
 - **Quy định chung:** `PLUGIN_GUIDE.md`.
-- **Hướng dẫn cho AI của mọi người:** `AGENTS.md`, `CLAUDE.md`.
+- **Hướng dẫn từng bước cho thành viên:** `PLUGIN_QUICKSTART.md`.
+- **Hướng dẫn cho AI làm việc trên thư mục:** `AGENTS.md`. Các file `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md` trỏ về đó.
+- **Prompt cho AI dạng chat** (ChatGPT, Gemini, Copilot…): `AI_PROMPT.md`, do `core/bundle.py: ai_prompt()` tạo từ file thật nên luôn khớp nền tảng. Prompt có vai trò, quy trình, định dạng trả lời, toàn bộ quy định, mọi hàm `core.sdk` và plugin mẫu.
 - **Các bước tiếp theo:** `ROADMAP.md`.
 
-Trang **Team → Plugin của team** có:
-- thông báo cho team;
-- danh sách plugin: phiên bản, người phụ trách, số bản ghi, lỗi cần sửa;
-- bộ khởi đầu tải về (code chạy trên máy + plugin mẫu `plugins/_template` + quy định, không có địa chỉ CSDL);
-- ô tự kiểm tra zip (chỉ đọc code, không chạy) và nút gửi plugin cho admin. Bản gửi nằm ở Lịch sử hoạt động, loại *Gửi plugin*.
+Trang **Team → Plugin của team** có các tab:
+- **Bắt đầu:** tải / sao chép prompt và hướng dẫn từng bước.
+- **Kiểm tra & gửi:**
+  - Dán câu trả lời của AI dạng chat (định dạng `FILE: plugins/<id>/…`, xem `core/plugins.py: files_from_text`) hoặc tải zip lên.
+  - Công cụ chỉ đọc code, không chạy. Có lỗi thì danh sách nằm trong khung sao chép được, để dán lại cho AI.
+  - Đạt thì tải zip hoặc gửi cho admin. Bản gửi nằm ở Lịch sử hoạt động, loại *Gửi plugin*.
+  - Có nút tải bộ khởi đầu.
+- **Danh sách plugin:** phiên bản, người phụ trách, số bản ghi, lỗi cần sửa.
+- **Quy định**, **Lộ trình**.
+
+Bộ khởi đầu gồm:
+- code chạy trên máy;
+- plugin mẫu `plugins/_template`;
+- quy định và prompt;
+- `make-plugin.bat`: dán câu trả lời của AI vào `ai-answer.txt` rồi nháy đúp là có thư mục plugin, kèm kết quả kiểm tra;
+- `run.bat`.
+
+Bộ này không có địa chỉ CSDL.
 
 Cách nền tảng chạy plugin:
 - **Một cửa:** plugin chỉ dùng nền tảng qua `core/sdk.py` (người dùng, quyền, game, lưu dữ liệu, lịch sử, master, Item ID, AI, secret). Các hàm ở đây giữ tương thích ngược để khi dời sang server nội bộ, plugin không phải sửa.
@@ -206,6 +223,9 @@ Chọn ở ô **🌐 Language** trên cùng thanh bên trái, kể cả ở tran
   - Plugin mẫu đạt quy định.
   - Bắt đủ các vi phạm: khai báo sai, import phần lõi / plugin khác, sqlite, thư viện lạ, `st.set_page_config`, khoá thiếu tiền tố, biến môi trường, bí mật, file lớn, lỗi cú pháp.
   - Kiểm tra zip, kể cả zip có đường dẫn lạ.
+  - Tách câu trả lời của AI dạng chat nhiều kiểu viết: `**FILE:**`, `### FILE: \`x\``, thiếu `plugins/<id>/`, thiếu `__init__.py`, file ngoài thư mục, chữ thừa sau dòng kết thúc (`END OF FILES`, vẫn nhận `HẾT FILE`).
+  - Prompt tự đủ: có mọi hàm sdk, phần plugin mẫu trong prompt tách lại được và đạt quy định.
+  - Luồng dán → kiểm tra → gửi trên trang, và `make-plugin` trong bộ khởi đầu.
   - sdk: lưu / đọc / lọc / chuẩn hoá mã chung, lịch sử và khôi phục, tách dữ liệu theo plugin và theo game, bản dịch của plugin.
   - Trang plugin lỗi không làm hỏng trang; relative import; form của plugin mẫu lưu được.
   - Menu và trang Plugin của team; bộ khởi đầu không có `data/`.

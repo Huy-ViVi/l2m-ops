@@ -1,19 +1,20 @@
-"""Bản tiếng Anh của chữ hiển thị (sdk.t). Viết dict thẳng — nền tảng đọc file này mà không chạy nó."""
+"""Translations of displayed text (sdk.t). This plugin's UI is written in English, so VI holds the Vietnamese version;
+a plugin written in Vietnamese uses EN instead. Write the dicts literally — the platform reads this file without running it."""
 
-EN = {
-    "Ghi chú gói nạp": "Package notes",
-    "Plugin mẫu — cách lưu và đọc dữ liệu qua sdk": "Sample plugin — how to save and read data through sdk",
-    "Ghi chú": "Note",
-    "💾 Lưu ghi chú": "💾 Save note",
-    "Cần Product Key và nội dung.": "Product Key and text are required.",
-    "Chưa có ghi chú nào.": "No notes yet.",
-    "Tên gói (master)": "Package name (master)",
-    "Người sửa": "Edited by",
-    "Lúc": "At",
-    "Chọn ghi chú": "Pick a note",
-    "Lịch sử sửa / xoá của ghi chú này": "Edit / delete history of this note",
-    "🗑 Xoá ghi chú": "🗑 Delete note",
-    "📌 Ghi vào lịch sử team": "📌 Log to team history",
-    "Tổng hợp {n} ghi chú": "Summary of {n} notes",
-    "Đã ghi bản #{aid} ở trang Lịch sử hoạt động.": "Logged as #{aid} in Activity history.",
+VI = {
+    "Package notes": "Ghi chú gói nạp",
+    "Sample plugin — how to save and read data through sdk": "Plugin mẫu — cách lưu và đọc dữ liệu qua sdk",
+    "Note": "Ghi chú",
+    "💾 Save note": "💾 Lưu ghi chú",
+    "Product Key and text are required.": "Cần Product Key và nội dung.",
+    "No notes yet.": "Chưa có ghi chú nào.",
+    "Package name (master)": "Tên gói (master)",
+    "Edited by": "Người sửa",
+    "At": "Lúc",
+    "Pick a note": "Chọn ghi chú",
+    "Edit / delete history of this note": "Lịch sử sửa / xoá của ghi chú này",
+    "🗑 Delete note": "🗑 Xoá ghi chú",
+    "📌 Log to team history": "📌 Ghi vào lịch sử team",
+    "Summary of {n} notes": "Tổng hợp {n} ghi chú",
+    "Logged as #{aid} in Activity history.": "Đã ghi bản #{aid} ở trang Lịch sử hoạt động.",
 }

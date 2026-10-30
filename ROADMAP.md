@@ -1,81 +1,86 @@
-# Lộ trình nền tảng L2M Ops
+# L2M Ops platform roadmap
 
-Mục tiêu: app của mọi người trong team chạy chung trên một nền tảng — cùng đăng nhập, cùng dữ liệu, cùng menu — rồi
-**liên kết thông tin** giữa các app để làm việc thuận tiện nhất.
+Goal: every team member's app runs on one shared platform — one sign-in, shared data, one menu — and the information in
+those apps is then **linked together** so the team can work as smoothly as possible.
 
-Nguyên tắc xuyên suốt:
-- Mỗi tính năng là một plugin.
-- Plugin chỉ dùng nền tảng qua `core.sdk`.
-- Plugin liên kết với nhau qua dữ liệu dùng chung, không gọi code của nhau.
+Principles throughout:
+- Each feature is a plugin.
+- Plugins use the platform only through `core.sdk`.
+- Plugins link to each other through shared data, never by calling each other's code.
 
-Nhờ vậy, khi nền tảng dời sang server nội bộ hay thay đổi bên trong, plugin không phải sửa.
+That way, when the platform moves to the internal server or changes internally, plugins do not need changes.
 
-## Phase 1 — Đưa app của mọi người lên nền tảng *(đang làm)*
+## Phase 1 — Bring everyone's apps onto the platform *(in progress)*
 
-**Nền tảng đã có:**
-- Khung plugin:
-  - Menu tự dựng từ `plugins/<id>/plugin.toml`.
-  - Plugin lỗi không làm hỏng phần còn lại.
+**The platform already has:**
+- The plugin frame:
+  - The menu is built automatically from `plugins/<id>/plugin.toml`.
+  - A broken plugin does not break the rest.
 - `core.sdk`:
-  - Lưu dữ liệu vào CSDL chung, có lịch sử sửa / xoá.
-  - Quyền, game đang chọn, file master, bảng Item ID, AI, secret.
-- Quy định `PLUGIN_GUIDE.md` và hướng dẫn cho AI `AGENTS.md` / `CLAUDE.md`.
-- Trang **Plugin của team**:
-  - Thông báo, danh sách plugin.
-  - Tải bộ khởi đầu, tự kiểm tra, gửi plugin.
-  - Quy định, lộ trình.
-- Kiểm tra tự động `tools/check_plugins.py`; GitHub Actions chạy sau mỗi lần đẩy code.
+  - Saves data to the shared database, with edit / delete history.
+  - Permissions, the selected game, the master file, the Item ID table, AI, secrets.
+- The rules `PLUGIN_GUIDE.md`, the quickstart `PLUGIN_QUICKSTART.md`, and AI instructions:
+  - `AI_PROMPT.md` for chat AIs;
+  - `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `.github/copilot-instructions.md` for folder-based AIs.
+- The **Team plugins** page:
+  - announcement, plugin list;
+  - AI prompt download, paste-and-check of AI answers, zip check, submission;
+  - starter kit, rules, roadmap.
+- Automatic checks: `tools/check_plugins.py`, and CI after every push.
 
-**Việc của admin:**
-1. Gửi thông báo cho team kèm đường dẫn trang **Plugin của team**.
-2. Thêm người làm plugin vào kho GitHub. Ai chưa có GitHub thì gửi zip qua website.
-3. Nhận plugin gửi lên (trang Lịch sử hoạt động, loại *Gửi plugin*) và đưa vào `plugins/<id>/`.
-4. Thêm thư viện / secret mà plugin cần.
-5. Ghi lại nhu cầu "Cần từ nền tảng" trong README của các plugin để làm ở phase 3.
+**Admin tasks:**
+1. Send the announcement to the team, with the link to the **Team plugins** page.
+2. Add plugin authors to the code repository. People without access submit a zip through the website.
+3. Pick up submitted plugins (Activity history, type *Plugin submission*) and put them in `plugins/<id>/`.
+4. Add the libraries / secrets plugins need.
+5. Collect the "Needs from the platform" sections of plugin READMEs to build in phase 3.
 
-**Việc của thành viên:**
-1. Tải bộ khởi đầu; đưa AI đọc `AGENTS.md` + `PLUGIN_GUIDE.md`.
-2. Chuyển app hiện có thành plugin.
-   - Dữ liệu lưu qua sdk, dùng đúng **mã chung** (mục 5.2).
-   - Có nút nhập dữ liệu từ app cũ.
-3. Chạy thử bằng `run.bat`, tự kiểm tra, gửi.
+**Member tasks:**
+1. Give `AI_PROMPT.md` to your AI (or open the starter kit with a folder-based AI).
+2. Turn your existing app into a plugin.
+   - Save data through sdk, using the **shared ID fields** (section 5.2).
+   - Include an import button for your old app's data.
+3. Check, try it, submit.
 
-**Xong khi:** mỗi app của team chạy được như một plugin trên website, với dữ liệu thật trong CSDL chung.
+**Done when:** every team app runs as a plugin on the website, with real data in the shared database.
 
-## Phase 2 — Liên kết thông tin
+## Phase 2 — Link the information
 
-Làm khi đã có dữ liệu thật của các plugin.
+Starts once plugins hold real data.
 
-1. Rà dữ liệu mọi plugin đang lưu (trang Plugin của team có số bản ghi theo plugin), cùng thống nhất mã chung còn thiếu.
-2. **Danh mục chung** do nền tảng giữ: gói (Product Key), item (Item ID), bản update (vùng + phiên bản + ngày), thuật ngữ dịch, thị trường.
-3. **Bảng liên kết** "A → quan hệ → B" mà plugin nào cũng ghi được (vd update KR → giới thiệu → item 812; gói → chứa → item;
-   thuật ngữ → là tên dịch của → item), cùng hàm sdk để ghi / đọc liên kết.
-4. **Trang chi tiết** cho gói / item / bản update: mỗi plugin góp một khung thông tin (nội dung master, lịch sử setup,
-   performance, bản dịch, update nước ngoài liên quan…).
-5. **Tìm kiếm chung** trên dữ liệu của mọi plugin.
+1. Review the data every plugin saves (the Team plugins page shows record counts per plugin), and agree on any missing
+   shared IDs together.
+2. **Shared catalogs** kept by the platform: packages (Product Key), items (Item ID), updates (region + version + date),
+   translation terms, markets.
+3. **A link table** "A → relation → B" that any plugin can write to (e.g. KR update → introduces → item 812;
+   package → contains → item; term → is the translation of → item), with sdk functions to write / read links.
+4. **Detail pages** for a package / item / update: each plugin contributes a panel (master content, setup history,
+   performance, translations, related overseas updates…).
+5. **Global search** across every plugin's data.
 
-**Xong khi:** mở một gói hoặc một item là thấy thông tin của mọi plugin liên quan trên cùng một trang.
+**Done when:** opening a package or an item shows the information of every related plugin on one page.
 
-## Phase 3 — Việc chạy nền
+## Phase 3 — Background work
 
-1. **Chạy định kỳ** (vd thu thập update mỗi sáng): plugin khai báo lịch trong plugin.toml.
-   - Trước mắt chạy bằng GitHub Actions.
-   - Khi có server nội bộ thì chạy trên server.
-2. **Lệnh agent cho plugin:** việc cần VPN / trình duyệt (NC tool, MyTool) chạy qua agent trên máy từng người, như các tính năng hiện có.
-   - Admin duyệt từng lệnh, vì code này chạy trên máy cả team.
-3. **Lưu file** lớn ngoài CSDL (kho file), để CSDL không đầy.
+1. **Scheduled runs** (e.g. collecting updates every morning): plugins declare a schedule in plugin.toml.
+   - CI schedules at first.
+   - On the internal server once it is available.
+2. **Agent jobs for plugins:** work that needs the VPN / a browser (NC tool, MyTool) runs through the agent on each
+   member's machine, like the existing features.
+   - The admin reviews every job, since this code runs on the whole team's machines.
+3. **File storage** for large files outside the database, so the database does not fill up.
 
-## Phase 4 — Dời sang server nội bộ
+## Phase 4 — Move to the internal servers
 
-Làm khi có quyền tạo project.
+When permissions are granted: code on the internal GitLab, website and database on the internal hosting (Dokploy).
 
-1. Dựng CSDL Postgres và website trên server, chuyển dữ liệu từ CSDL hiện tại sang.
-2. Chạy định kỳ trên server, bỏ GitHub Actions.
-3. Đổi địa chỉ cho agent, website và người dùng.
+1. Set up Postgres and the website there, move the data over from the current database.
+2. Run scheduled work there.
+3. Switch the agent, the website and users to the new addresses.
 
-Plugin không phải sửa gì, vì chỉ dùng `core.sdk`.
+Plugins need no changes, because they only use `core.sdk`.
 
-## Phase 5 — Trợ lý AI xuyên plugin
+## Phase 5 — AI assistant across plugins
 
-Hỏi đáp trên dữ liệu đã liên kết của mọi plugin. Ví dụ: "bản update TW tuần sau có item nào chưa dịch, gói nào tương tự
-đã bán ở SEA và bán thế nào?"
+Questions and answers over the linked data of every plugin. Example: "which items in next week's TW update are not
+translated yet, which similar packages already sold in SEA and how did they do?"
